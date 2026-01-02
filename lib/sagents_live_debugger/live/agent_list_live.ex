@@ -726,23 +726,105 @@ defmodule SagentsLiveDebugger.AgentListLive do
       <% else %>
         <div class="list-card">
           <%= for entry <- @agent.middleware do %>
-            <div class="list-item">
-              <div class="list-item-header">
-                <span class="list-item-name"><%= format_module_name(entry.id) %></span>
-              </div>
-              <%= if map_size(entry.config) > 0 do %>
-                <div class="list-item-details">
-                  <strong>Config:</strong>
-                  <pre phx-no-format><%= inspect(entry.config, pretty: true, limit: :infinity) %></pre>
-                </div>
-              <% end %>
-            </div>
+            <.middleware_item entry={entry} />
           <% end %>
         </div>
       <% end %>
     </div>
     """
   end
+
+  defp middleware_item(assigns) do
+    # Filter out agent_id and model from config
+    config_without_special = Map.drop(assigns.entry.config, [:agent_id, :model])
+    model = Map.get(assigns.entry.config, :model)
+
+    # Generate unique IDs for this middleware item
+    middleware_id = "middleware-#{:erlang.phash2(assigns.entry.id)}"
+    toggle_id = "toggle-#{middleware_id}"
+
+    assigns = assign(assigns, :config_without_special, config_without_special)
+    assigns = assign(assigns, :model, model)
+    assigns = assign(assigns, :middleware_id, middleware_id)
+    assigns = assign(assigns, :toggle_id, toggle_id)
+
+    ~H"""
+    <div class="list-item">
+      <div
+        class="list-item-header middleware-header-clickable"
+        phx-click={
+          Phoenix.LiveView.JS.toggle(to: "##{@middleware_id}")
+          |> Phoenix.LiveView.JS.toggle_class("collapsed", to: "##{@toggle_id}")
+        }
+      >
+        <span class="list-item-name"><%= format_module_name(@entry.id) %></span>
+        <span class="toggle-icon collapsed" id={@toggle_id}></span>
+      </div>
+
+      <div class="middleware-content" id={@middleware_id} style="display: none;">
+        <%= if @model do %>
+          <.middleware_model_config model={@model} entry_id={@entry.id} />
+        <% end %>
+
+        <%= if map_size(@config_without_special) > 0 do %>
+          <div class="middleware-config">
+            <%= for {key, value} <- @config_without_special do %>
+              <.middleware_config_entry key={key} value={value} />
+            <% end %>
+          </div>
+        <% end %>
+      </div>
+    </div>
+    """
+  end
+
+  defp middleware_model_config(assigns) do
+    # Generate unique ID for this model config
+    model_id = "model-#{:erlang.phash2(assigns.entry_id)}"
+    toggle_id = "toggle-#{model_id}"
+
+    assigns = assign(assigns, :model_id, model_id)
+    assigns = assign(assigns, :toggle_id, toggle_id)
+
+    ~H"""
+    <div class="middleware-model">
+      <div
+        class="middleware-model-header"
+        phx-click={
+          Phoenix.LiveView.JS.toggle(to: "##{@model_id}")
+          |> Phoenix.LiveView.JS.toggle_class("collapsed", to: "##{@toggle_id}")
+        }
+      >
+        <span class="config-label">🤖 Model</span>
+        <span class="model-brief"><%= get_model_name(@model) %></span>
+        <span class="toggle-icon collapsed" id={@toggle_id}></span>
+      </div>
+      <div class="middleware-model-content" id={@model_id} style="display: none;">
+        <pre class="config-value" phx-no-format><%= inspect(@model, pretty: true, limit: :infinity) %></pre>
+      </div>
+    </div>
+    """
+  end
+
+  defp middleware_config_entry(assigns) do
+    ~H"""
+    <div class="config-entry">
+      <div class="config-label"><%= format_config_key(@key) %></div>
+      <pre class={"config-value #{if is_binary(@value), do: "config-value-text", else: ""}"} phx-no-format><%= format_config_value(@value) %></pre>
+    </div>
+    """
+  end
+
+  defp get_model_name(model) when is_map(model) do
+    Map.get(model, :model) || Map.get(model, :__struct__) |> format_module_name()
+  end
+  defp get_model_name(_), do: "Unknown"
+
+  defp format_config_key(key) when is_atom(key), do: Atom.to_string(key)
+  defp format_config_key(key), do: inspect(key)
+
+  defp format_config_value(value) when is_binary(value), do: value
+  defp format_config_value(value), do: inspect(value, pretty: true, limit: :infinity)
 
   defp tools_section(assigns) do
     ~H"""

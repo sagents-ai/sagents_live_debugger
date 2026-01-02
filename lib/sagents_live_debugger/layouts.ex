@@ -902,6 +902,131 @@ defmodule SagentsLiveDebugger.Layouts do
     .system-message-content::-webkit-scrollbar-thumb:hover {
       background: #9ca3af;
     }
+
+    /* Middleware Configuration Display */
+    .middleware-header-clickable {
+      cursor: pointer;
+      user-select: none;
+      transition: background 0.2s;
+    }
+
+    .middleware-header-clickable:hover {
+      background: #f9fafb;
+    }
+
+    .middleware-content {
+      padding-top: 0.75rem;
+    }
+
+    .middleware-config {
+      margin-top: 0.5rem;
+      display: flex;
+      flex-direction: column;
+      gap: 1rem;
+    }
+
+    .config-entry {
+      padding: 0.75rem;
+      background: #f9fafb;
+      border-radius: 0.375rem;
+      border: 1px solid #e5e7eb;
+    }
+
+    .config-label {
+      font-weight: 600;
+      color: #374151;
+      font-size: 0.875rem;
+      margin-bottom: 0.5rem;
+    }
+
+    .config-value {
+      margin: 0;
+      padding: 0.75rem;
+      background: white;
+      border: 1px solid #e5e7eb;
+      border-radius: 0.25rem;
+      overflow-x: auto;
+      font-family: 'Courier New', monospace;
+      font-size: 0.8125rem;
+      color: #1f2937;
+      line-height: 1.5;
+    }
+
+    .config-value-text {
+      white-space: pre-wrap;
+      word-wrap: break-word;
+    }
+
+    /* Middleware Model Section */
+    .middleware-model {
+      margin-top: 0.75rem;
+      border: 1px solid #e5e7eb;
+      border-radius: 0.375rem;
+      background: #fafafa;
+    }
+
+    .middleware-model-header {
+      cursor: pointer;
+      padding: 0.75rem 1rem;
+      background: #f3f4f6;
+      border-bottom: 1px solid #e5e7eb;
+      display: flex;
+      justify-content: space-between;
+      align-items: center;
+      gap: 1rem;
+      user-select: none;
+      transition: background 0.2s;
+    }
+
+    .middleware-model-header:hover {
+      background: #e5e7eb;
+    }
+
+    .middleware-model-header .config-label {
+      margin: 0;
+      font-size: 0.875rem;
+      flex-shrink: 0;
+    }
+
+    .model-brief {
+      flex: 1;
+      color: #6b7280;
+      font-size: 0.8125rem;
+      font-family: 'Courier New', monospace;
+      white-space: nowrap;
+      overflow: hidden;
+      text-overflow: ellipsis;
+    }
+
+    .middleware-model-content {
+      background: #fafafa;
+      padding: 1rem;
+    }
+
+    .middleware-model-content .config-value {
+      max-height: 400px;
+      overflow-y: auto;
+    }
+
+    /* Scrollbar styling for model content */
+    .middleware-model-content .config-value::-webkit-scrollbar {
+      width: 6px;
+      height: 6px;
+    }
+
+    .middleware-model-content .config-value::-webkit-scrollbar-track {
+      background: #f3f4f6;
+      border-radius: 3px;
+    }
+
+    .middleware-model-content .config-value::-webkit-scrollbar-thumb {
+      background: #d1d5db;
+      border-radius: 3px;
+    }
+
+    .middleware-model-content .config-value::-webkit-scrollbar-thumb:hover {
+      background: #9ca3af;
+    }
     """
   end
 end
