@@ -1027,6 +1027,276 @@ defmodule SagentsLiveDebugger.Layouts do
     .middleware-model-content .config-value::-webkit-scrollbar-thumb:hover {
       background: #9ca3af;
     }
+
+    /* Events Tab Styles */
+    .events-tab {
+      padding: 20px;
+    }
+
+    .events-header {
+      margin-bottom: 20px;
+    }
+
+    .events-header h3 {
+      margin: 0 0 5px 0;
+      font-size: 1.2rem;
+    }
+
+    .events-subtitle {
+      margin: 0;
+      color: #6b7280;
+      font-size: 0.9rem;
+    }
+
+    .events-list {
+      display: flex;
+      flex-direction: column;
+      gap: 8px;
+    }
+
+    .event-item {
+      background: white;
+      border-radius: 6px;
+      overflow: hidden;
+      border: 1px solid #e5e7eb;
+    }
+
+    .event-item-header {
+      display: flex;
+      justify-content: space-between;
+      align-items: center;
+      padding: 12px 16px;
+      cursor: pointer;
+      transition: background 0.2s;
+    }
+
+    .event-item-header:hover {
+      background: #f9fafb;
+    }
+
+    .event-item-main {
+      display: flex;
+      align-items: center;
+      gap: 12px;
+      flex: 1;
+    }
+
+    .event-badge {
+      display: inline-block;
+      padding: 4px 8px;
+      border-radius: 4px;
+      font-size: 0.75rem;
+      font-weight: 600;
+      text-transform: uppercase;
+      letter-spacing: 0.5px;
+    }
+
+    .event-badge-regular {
+      background: #3b82f6;
+      color: white;
+    }
+
+    .event-badge-debug {
+      background: #8b5cf6;
+      color: white;
+    }
+
+    .event-summary {
+      font-size: 0.95rem;
+      color: #1f2937;
+    }
+
+    .event-item-meta {
+      display: flex;
+      align-items: center;
+      gap: 12px;
+    }
+
+    .event-timestamp {
+      font-size: 0.85rem;
+      color: #6b7280;
+      font-family: monospace;
+    }
+
+    .event-details {
+      border-top: 1px solid #e5e7eb;
+      background: #fafafa;
+    }
+
+    .event-details-content {
+      padding: 16px;
+      display: flex;
+      flex-direction: column;
+      gap: 12px;
+    }
+
+    .event-field {
+      display: flex;
+      gap: 8px;
+    }
+
+    .event-label {
+      font-weight: 600;
+      color: #6b7280;
+      min-width: 140px;
+    }
+
+    .event-value {
+      color: #1f2937;
+      word-break: break-word;
+    }
+
+    .event-raw {
+      background: #f3f4f6;
+      border: 1px solid #e5e7eb;
+      border-radius: 4px;
+      padding: 12px;
+      font-size: 0.85rem;
+      overflow-x: auto;
+      margin: 0;
+      color: #374151;
+    }
+
+    /* TODOs Tab Styles */
+    .todos-tab {
+      padding: 20px;
+    }
+
+    .todos-header {
+      display: flex;
+      align-items: center;
+      gap: 12px;
+      margin-bottom: 20px;
+    }
+
+    .todos-header h3 {
+      margin: 0;
+      font-size: 1.2rem;
+    }
+
+    .todos-count-badge {
+      display: inline-block;
+      padding: 4px 10px;
+      background: #f3f4f6;
+      color: #1f2937;
+      border-radius: 12px;
+      font-size: 0.85rem;
+      font-weight: 600;
+    }
+
+    .tab-count-badge {
+      display: inline-block;
+      margin-left: 6px;
+      padding: 2px 8px;
+      background: #3b82f6;
+      color: white;
+      border-radius: 10px;
+      font-size: 0.75rem;
+      font-weight: 600;
+    }
+
+    .todos-list {
+      display: flex;
+      flex-direction: column;
+      gap: 12px;
+    }
+
+    .todo-item {
+      background: white;
+      border-left: 4px solid;
+      border-radius: 6px;
+      padding: 16px;
+      border: 1px solid #e5e7eb;
+    }
+
+    /* Status-based border colors */
+    .todo-status-pending {
+      border-left-color: #6b7280;
+    }
+
+    .todo-status-in_progress {
+      border-left-color: #3b82f6;
+      background: rgba(59, 130, 246, 0.05);
+      box-shadow: 0 0 0 1px rgba(59, 130, 246, 0.1);
+    }
+
+    .todo-status-completed {
+      border-left-color: #10b981;
+      opacity: 0.7;
+    }
+
+    .todo-header {
+      display: flex;
+      justify-content: space-between;
+      align-items: center;
+      margin-bottom: 10px;
+    }
+
+    .todo-header-left {
+      display: flex;
+      align-items: center;
+      gap: 8px;
+    }
+
+    .todo-number {
+      font-weight: 600;
+      color: #6b7280;
+      font-size: 0.85rem;
+      min-width: 30px;
+    }
+
+    .todo-icon {
+      font-size: 1.1rem;
+    }
+
+    .todo-badge {
+      padding: 4px 10px;
+      border-radius: 4px;
+      font-size: 0.75rem;
+      font-weight: 600;
+      letter-spacing: 0.5px;
+    }
+
+    .todo-badge.status-pending {
+      background: #374151;
+      color: #ffffffee;
+    }
+
+    .todo-badge.status-in_progress {
+      background: #1e40af;
+      color: #ffffffee;
+    }
+
+    .todo-badge.status-completed {
+      background: #065f46;
+      color: #ffffffee;
+    }
+
+    .todo-content {
+      font-size: 0.95rem;
+      line-height: 1.5;
+      color: #1f2937;
+      margin-bottom: 8px;
+    }
+
+    .todo-active-form {
+      display: flex;
+      align-items: center;
+      gap: 6px;
+      margin-top: 8px;
+      padding-top: 8px;
+      border-top: 1px solid #e5e7eb;
+      font-size: 0.9rem;
+      color: #6b7280;
+    }
+
+    .active-form-label {
+      font-weight: 600;
+    }
+
+    .todo-active-form em {
+      color: #4b5563;
+    }
     """
   end
 end

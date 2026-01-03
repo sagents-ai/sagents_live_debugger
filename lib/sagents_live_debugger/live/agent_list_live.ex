@@ -49,6 +49,8 @@ defmodule SagentsLiveDebugger.AgentListLive do
       |> assign(:agent_metadata, nil)
       |> assign(:agent_state, nil)
       |> assign(:current_tab, :overview)
+      |> assign(:event_stream, [])
+      |> assign(:subscribed_agent_id, nil)
 
     {:ok, socket}
   end
@@ -61,27 +63,49 @@ defmodule SagentsLiveDebugger.AgentListLive do
 
     case Map.get(params, "agent_id") do
       nil ->
-        # List view
+        # List view - unsubscribe from any previous agent
+        socket = maybe_unsubscribe_from_previous_agent(socket)
+
+        # Clear detail-related assigns
         socket =
           socket
           |> assign(:view_mode, :list)
           |> assign(:selected_agent_id, nil)
+          |> assign(:agent_detail, nil)
+          |> assign(:agent_metadata, nil)
+          |> assign(:agent_state, nil)
+          |> assign(:event_stream, [])
 
         {:noreply, socket}
 
       agent_id ->
-        # Detail view - load agent data
+        # Detail view
+
+        # Unsubscribe from previous agent if different
+        socket =
+          if socket.assigns[:subscribed_agent_id] != agent_id do
+            maybe_unsubscribe_from_previous_agent(socket)
+          else
+            socket
+          end
+
+        # Subscribe to new agent events
+        socket =
+          if connected?(socket) && socket.assigns[:subscribed_agent_id] != agent_id do
+            subscribe_to_agent_events(socket, agent_id)
+          else
+            socket
+          end
+
+        # Get tab from params
         tab = Map.get(params, "tab", "overview")
         current_tab = case tab do
           "messages" -> :messages
           "middleware" -> :middleware
           "tools" -> :tools
+          "todos" -> :todos
+          "events" -> :events
           _ -> :overview
-        end
-
-        # Subscribe to agent events if connected
-        if connected?(socket) && socket.assigns.selected_agent_id != agent_id do
-          subscribe_to_agent(agent_id, socket.assigns.coordinator)
         end
 
         # Touch the agent to reset inactivity timer
@@ -89,15 +113,48 @@ defmodule SagentsLiveDebugger.AgentListLive do
           LangChain.Agents.AgentServer.touch(agent_id)
         end
 
+        # Load agent detail and clear/reset event stream
         socket =
           socket
           |> assign(:view_mode, :detail)
           |> assign(:selected_agent_id, agent_id)
           |> assign(:current_tab, current_tab)
+          |> assign(:event_stream, [])
           |> load_agent_detail(agent_id)
 
         {:noreply, socket}
     end
+  end
+
+  defp maybe_unsubscribe_from_previous_agent(socket) do
+    if prev_agent_id = socket.assigns[:subscribed_agent_id] do
+      unsubscribe_from_agent_events(prev_agent_id, socket.assigns.coordinator)
+      assign(socket, :subscribed_agent_id, nil)
+    else
+      socket
+    end
+  end
+
+  defp subscribe_to_agent_events(socket, agent_id) do
+    # Use AgentServer subscription functions
+    # Handle case where agent doesn't exist (has shut down)
+    with :ok <- LangChain.Agents.AgentServer.subscribe(agent_id),
+         :ok <- LangChain.Agents.AgentServer.subscribe_debug(agent_id) do
+      assign(socket, :subscribed_agent_id, agent_id)
+    else
+      {:error, :process_not_found} ->
+        # Agent doesn't exist, don't subscribe
+        socket
+      {:error, _reason} ->
+        # Other error (e.g., no pubsub configured), don't subscribe
+        socket
+    end
+  end
+
+  defp unsubscribe_from_agent_events(agent_id, _coordinator) do
+    # Unsubscribe returns :ok even if the agent process doesn't exist
+    :ok = LangChain.Agents.AgentServer.unsubscribe(agent_id)
+    :ok = LangChain.Agents.AgentServer.unsubscribe_debug(agent_id)
   end
 
   def handle_info(:refresh, socket) do
@@ -192,6 +249,111 @@ defmodule SagentsLiveDebugger.AgentListLive do
     {:noreply, socket}
   end
 
+  # Handle todos_updated events
+  def handle_info({:todos_updated, todos}, socket) do
+    socket =
+      if socket.assigns.view_mode == :detail && socket.assigns.agent_state do
+        # Update the agent state with new todos
+        updated_state = %{socket.assigns.agent_state | todos: todos}
+
+        socket
+        |> assign(:agent_state, updated_state)
+        |> add_event_to_stream({:todos_updated, todos}, :regular)
+      else
+        socket
+      end
+
+    {:noreply, socket}
+  end
+
+  # Handle llm_message events
+  def handle_info({:llm_message, message}, socket) do
+    socket =
+      if socket.assigns.view_mode == :detail && socket.assigns.agent_state do
+        # Append message to state
+        updated_messages = socket.assigns.agent_state.messages ++ [message]
+        updated_state = %{socket.assigns.agent_state | messages: updated_messages}
+
+        socket
+        |> assign(:agent_state, updated_state)
+        |> add_event_to_stream({:llm_message, message}, :regular)
+      else
+        socket
+      end
+
+    {:noreply, socket}
+  end
+
+  # Handle llm_deltas events (streaming tokens)
+  def handle_info({:llm_deltas, deltas}, socket) do
+    socket =
+      if socket.assigns.view_mode == :detail do
+        add_event_to_stream(socket, {:llm_deltas, deltas}, :regular)
+      else
+        socket
+      end
+
+    {:noreply, socket}
+  end
+
+  # Handle llm_token_usage events
+  def handle_info({:llm_token_usage, usage}, socket) do
+    socket =
+      if socket.assigns.view_mode == :detail do
+        add_event_to_stream(socket, {:llm_token_usage, usage}, :regular)
+      else
+        socket
+      end
+
+    {:noreply, socket}
+  end
+
+  # Handle conversation_title_generated events
+  def handle_info({:conversation_title_generated, title, agent_id}, socket) do
+    socket =
+      if socket.assigns.view_mode == :detail do
+        add_event_to_stream(socket, {:conversation_title_generated, title, agent_id}, :regular)
+      else
+        socket
+      end
+
+    {:noreply, socket}
+  end
+
+  # Catch-all handler for debug events and other regular events
+  # This needs to come AFTER specific handlers
+  def handle_info({:middleware_action, _module, _action} = event, socket) do
+    socket =
+      if socket.assigns.view_mode == :detail do
+        # Middleware actions are debug events
+        add_event_to_stream(socket, event, :debug)
+      else
+        socket
+      end
+
+    {:noreply, socket}
+  end
+
+  # Generic catch-all for any other tuple events
+  # This should be the LAST handle_info clause for events
+  def handle_info(event, socket) when is_tuple(event) do
+    socket =
+      if socket.assigns.view_mode == :detail do
+        # Assume regular event unless it matches debug patterns
+        category = if tuple_size(event) >= 1 && elem(event, 0) == :agent_state_update do
+          :debug
+        else
+          :regular
+        end
+
+        add_event_to_stream(socket, event, category)
+      else
+        socket
+      end
+
+    {:noreply, socket}
+  end
+
   def handle_event("update_filters", %{"filter_form" => filter_params}, socket) do
     # Create changeset from new form with incoming params
     changeset =
@@ -256,19 +418,6 @@ defmodule SagentsLiveDebugger.AgentListLive do
   # Subscribe to a presence topic
   defp subscribe_to_presence(pubsub_name, topic) do
     Phoenix.PubSub.subscribe(pubsub_name, topic)
-  end
-
-  # Subscribe to agent status change events
-  defp subscribe_to_agent(agent_id, coordinator) do
-    # Get PubSub name from coordinator
-    pubsub_name = coordinator.pubsub_name()
-
-    topic = "agent_server:#{agent_id}"
-    Phoenix.PubSub.subscribe(pubsub_name, topic)
-
-    # Also subscribe to debug events
-    debug_topic = "agent_server:debug:#{agent_id}"
-    Phoenix.PubSub.subscribe(pubsub_name, debug_topic)
   end
 
   # Load agent detail data
@@ -394,6 +543,20 @@ defmodule SagentsLiveDebugger.AgentListLive do
           >
             Tools
           </button>
+          <button
+            phx-click="change_tab"
+            phx-value-tab="todos"
+            class={"tab-button #{if @current_tab == :todos, do: "active", else: ""}"}
+          >
+            TODOs
+          </button>
+          <button
+            phx-click="change_tab"
+            phx-value-tab="events"
+            class={"tab-button #{if @current_tab == :events, do: "active", else: ""}"}
+          >
+            Events
+          </button>
         </div>
 
         <div class="agent-detail-content">
@@ -406,6 +569,10 @@ defmodule SagentsLiveDebugger.AgentListLive do
               <.middleware_tab agent={@agent_detail} />
             <% :tools -> %>
               <.tools_tab agent={@agent_detail} />
+            <% :events -> %>
+              <.events_tab event_stream={@event_stream} />
+            <% :todos -> %>
+              <.todos_tab state={@agent_state} />
           <% end %>
         </div>
       <% end %>
@@ -720,7 +887,7 @@ defmodule SagentsLiveDebugger.AgentListLive do
   defp middleware_section(assigns) do
     ~H"""
     <div class="info-section">
-      <h3>🔧 Middleware</h3>
+      <h3>🔧 Middleware (<%= length(@agent.middleware) %>)</h3>
       <%= if Enum.empty?(@agent.middleware) do %>
         <p class="empty-state">No middleware configured</p>
       <% else %>
@@ -829,30 +996,55 @@ defmodule SagentsLiveDebugger.AgentListLive do
   defp tools_section(assigns) do
     ~H"""
     <div class="info-section">
-      <h3>🛠️ Tools</h3>
+      <h3>🛠️ Tools (<%= length(@agent.tools) %>)</h3>
       <%= if Enum.empty?(@agent.tools) do %>
         <p class="empty-state">No tools available</p>
       <% else %>
         <div class="list-card">
           <%= for tool <- @agent.tools do %>
-            <div class="list-item">
-              <div class="list-item-header">
-                <span class="list-item-name"><%= tool.name %></span>
-                <%= if tool.async do %>
-                  <span class="badge badge-async">Async</span>
-                <% end %>
-              </div>
-              <div class="list-item-description" style="white-space: pre-wrap;" phx-no-format><%= tool.description %></div>
-              <%= if length(tool.parameters || []) > 0 do %>
-                <div class="list-item-details">
-                  <strong>Parameters:</strong>
-                  <ul phx-no-format><%= for param <- tool.parameters do %><li style="white-space: pre-wrap;"><code><%= param.name %></code><%= if param.required do %> <span class="badge badge-required">Required</span><% end %> - <%= param.description %></li><% end %></ul>
-                </div>
-              <% end %>
-            </div>
+            <.tool_item tool={tool} />
           <% end %>
         </div>
       <% end %>
+    </div>
+    """
+  end
+
+  defp tool_item(assigns) do
+    # Generate unique IDs for this tool item
+    tool_id = "tool-#{:erlang.phash2(assigns.tool.name)}"
+    toggle_id = "toggle-#{tool_id}"
+
+    assigns = assign(assigns, :tool_id, tool_id)
+    assigns = assign(assigns, :toggle_id, toggle_id)
+
+    ~H"""
+    <div class="list-item">
+      <div
+        class="list-item-header middleware-header-clickable"
+        phx-click={
+          Phoenix.LiveView.JS.toggle(to: "##{@tool_id}")
+          |> Phoenix.LiveView.JS.toggle_class("collapsed", to: "##{@toggle_id}")
+        }
+      >
+        <span class="list-item-name">
+          <%= @tool.name %>
+          <%= if @tool.async do %>
+            <span class="badge badge-async">Async</span>
+          <% end %>
+        </span>
+        <span class="toggle-icon collapsed" id={@toggle_id}></span>
+      </div>
+
+      <div class="middleware-content" id={@tool_id} style="display: none;">
+        <div class="list-item-description" style="white-space: pre-wrap;" phx-no-format><%= @tool.description %></div>
+        <%= if length(@tool.parameters || []) > 0 do %>
+          <div class="list-item-details">
+            <strong>Parameters:</strong>
+            <ul phx-no-format><%= for param <- @tool.parameters do %><li style="white-space: pre-wrap;"><code><%= param.name %></code><%= if param.required do %> <span class="badge badge-required">Required</span><% end %> - <%= param.description %></li><% end %></ul>
+          </div>
+        <% end %>
+      </div>
     </div>
     """
   end
@@ -1008,6 +1200,199 @@ defmodule SagentsLiveDebugger.AgentListLive do
     """
   end
 
+  # Events Tab
+  defp events_tab(assigns) do
+    event_count = if assigns[:event_stream], do: length(assigns.event_stream), else: 0
+    assigns = assign(assigns, :event_count, event_count)
+
+    ~H"""
+    <div class="events-tab">
+      <div class="events-header">
+        <h3>📡 Event Stream (<%= @event_count %>)</h3>
+        <p class="events-subtitle">Real-time agent events (last 100)</p>
+      </div>
+
+      <%= if @event_stream && @event_stream != [] do %>
+        <div class="events-list">
+          <%= for event_data <- @event_stream do %>
+            <.event_item event_data={event_data} />
+          <% end %>
+        </div>
+      <% else %>
+        <div class="empty-state">
+          <p>No events yet. Events will appear here as the agent executes.</p>
+        </div>
+      <% end %>
+    </div>
+    """
+  end
+
+  defp event_item(assigns) do
+    event_id = "event-#{assigns.event_data.id}"
+    toggle_id = "toggle-#{assigns.event_data.id}"
+
+    assigns = assign(assigns, :event_id, event_id)
+    assigns = assign(assigns, :toggle_id, toggle_id)
+
+    ~H"""
+    <div class="event-item">
+      <div
+        class="event-item-header"
+        phx-click={
+          Phoenix.LiveView.JS.toggle(to: "##{@event_id}")
+          |> Phoenix.LiveView.JS.toggle_class("collapsed", to: "##{@toggle_id}")
+        }
+      >
+        <div class="event-item-main">
+          <span class={"event-badge event-badge-#{@event_data.category}"}>
+            <%= if @event_data.category == :debug, do: "DEBUG", else: "EVENT" %>
+          </span>
+          <span class="event-summary"><%= @event_data.event.summary %></span>
+        </div>
+        <div class="event-item-meta">
+          <span class="event-timestamp">
+            <%= format_timestamp(@event_data.timestamp) %>
+          </span>
+          <span class="toggle-icon collapsed" id={@toggle_id}></span>
+        </div>
+      </div>
+
+      <div class="event-details" id={@event_id} style="display: none;">
+        <div class="event-details-content">
+          <%= if @event_data.event.type == "middleware_action" do %>
+            <div class="event-field">
+              <span class="event-label">Middleware:</span>
+              <span class="event-value"><%= @event_data.event.middleware %></span>
+            </div>
+            <div class="event-field">
+              <span class="event-label">Action:</span>
+              <span class="event-value"><%= @event_data.event.action %></span>
+            </div>
+          <% end %>
+
+          <%= if Map.has_key?(@event_data.event, :status) do %>
+            <div class="event-field">
+              <span class="event-label">Status:</span>
+              <span class="event-value"><%= @event_data.event.status %></span>
+            </div>
+          <% end %>
+
+          <%= if Map.has_key?(@event_data.event, :content_preview) do %>
+            <div class="event-field">
+              <span class="event-label">Content Preview:</span>
+              <span class="event-value"><%= @event_data.event.content_preview %></span>
+            </div>
+          <% end %>
+
+          <%= if Map.has_key?(@event_data.event, :count) do %>
+            <div class="event-field">
+              <span class="event-label">Count:</span>
+              <span class="event-value"><%= @event_data.event.count %></span>
+            </div>
+          <% end %>
+
+          <%= if Map.has_key?(@event_data.event, :token_count) do %>
+            <div class="event-field">
+              <span class="event-label">Token Count:</span>
+              <span class="event-value"><%= @event_data.event.token_count %></span>
+            </div>
+          <% end %>
+
+          <%= if Map.has_key?(@event_data.event, :delta_batches) do %>
+            <div class="event-field">
+              <span class="event-label">Delta Batches:</span>
+              <span class="event-value"><%= @event_data.event.delta_batches %></span>
+            </div>
+          <% end %>
+
+          <div class="event-field">
+            <span class="event-label">Raw Event:</span>
+            <pre class="event-raw"><%= @event_data.raw_event %></pre>
+          </div>
+        </div>
+      </div>
+    </div>
+    """
+  end
+
+  defp format_timestamp(datetime) do
+    datetime
+    |> DateTime.truncate(:second)
+    |> Calendar.strftime("%H:%M:%S")
+  end
+
+  # TODOs Tab
+  defp todos_tab(assigns) do
+    ~H"""
+    <div class="todos-tab">
+      <%= if @state && @state.todos do %>
+        <div class="todos-header">
+          <h3>📋 Current TODOs (<%= length(@state.todos) %>)</h3>
+        </div>
+
+        <%= if Enum.empty?(@state.todos) do %>
+          <div class="empty-state">
+            <p>No TODOs - Agent is not tracking any tasks</p>
+          </div>
+        <% else %>
+          <div class="todos-list">
+            <%= for {todo, index} <- Enum.with_index(@state.todos, 1) do %>
+              <.todo_item todo={todo} index={index} />
+            <% end %>
+          </div>
+        <% end %>
+      <% else %>
+        <div class="empty-state">
+          <p>Loading TODO data...</p>
+        </div>
+      <% end %>
+    </div>
+    """
+  end
+
+  defp todo_item(assigns) do
+    ~H"""
+    <div class={"todo-item todo-status-#{@todo.status}"}>
+      <div class="todo-header">
+        <div class="todo-header-left">
+          <span class="todo-number">#<%= @index %></span>
+          <span class="todo-icon"><%= todo_status_icon(@todo.status) %></span>
+        </div>
+        <span class={"todo-badge status-#{@todo.status}"}>
+          <%= format_status(@todo.status) %>
+        </span>
+      </div>
+
+      <div class="todo-content">
+        <%= @todo.content %>
+      </div>
+
+      <%= if Map.get(@todo, :active_form) && @todo.active_form do %>
+        <div class="todo-active-form">
+          <span class="active-form-label">Currently:</span>
+          <em><%= @todo.active_form %></em>
+        </div>
+      <% end %>
+    </div>
+    """
+  end
+
+  defp todo_status_icon(status) do
+    case status do
+      :pending -> "⏸️"
+      :in_progress -> "▶️"
+      :completed -> "✅"
+      _ -> "❓"
+    end
+  end
+
+  defp format_status(status) do
+    status
+    |> to_string()
+    |> String.upcase()
+    |> String.replace("_", " ")
+  end
+
   defp message_item(assigns) do
     ~H"""
     <div class={"message-item message-#{@message.role}"}>
@@ -1016,9 +1401,9 @@ defmodule SagentsLiveDebugger.AgentListLive do
           <%= message_role_emoji(@message.role) %>
           <%= String.capitalize(to_string(@message.role)) %>
         </span>
-        <%= if @message.status do %>
-          <span class={"message-status status-#{@message.status}"}>
-            <%= @message.status %>
+        <%= if Map.get(@message, :status) do %>
+          <span class={"message-status status-#{Map.get(@message, :status)}"}>
+            <%= Map.get(@message, :status) %>
           </span>
         <% end %>
       </div>
@@ -1027,7 +1412,7 @@ defmodule SagentsLiveDebugger.AgentListLive do
         <%= render_message_content(@message) %>
       </div>
 
-      <%= if @message.tool_calls && length(@message.tool_calls) > 0 do %>
+      <%= if @message.tool_calls && @message.tool_calls != [] do %>
         <div class="message-tool-calls">
           <strong>Tool Calls:</strong>
           <%= for tool_call <- @message.tool_calls do %>
@@ -1036,7 +1421,7 @@ defmodule SagentsLiveDebugger.AgentListLive do
         </div>
       <% end %>
 
-      <%= if @message.tool_results && length(@message.tool_results) > 0 do %>
+      <%= if @message.tool_results && @message.tool_results != [] do %>
         <div class="message-tool-results">
           <strong>Tool Results:</strong>
           <%= for tool_result <- @message.tool_results do %>
@@ -1158,9 +1543,9 @@ defmodule SagentsLiveDebugger.AgentListLive do
         <%= if @tool_result.tool_call_id do %>
           <span class="tool-call-id"><%= @tool_result.tool_call_id %></span>
         <% end %>
-        <%= if @tool_result.status do %>
-          <span class={"result-status status-#{@tool_result.status}"}>
-            <%= @tool_result.status %>
+        <%= if Map.get(@tool_result, :status) do %>
+          <span class={"result-status status-#{Map.get(@tool_result, :status)}"}>
+            <%= Map.get(@tool_result, :status) %>
           </span>
         <% end %>
       </div>
@@ -1231,7 +1616,204 @@ defmodule SagentsLiveDebugger.AgentListLive do
     module
     |> Atom.to_string()
     |> String.replace_prefix("Elixir.", "")
+    |> String.split(".")
+    |> List.last()
   end
 
   defp format_module_name(module), do: inspect(module, limit: :infinity)
+
+  # Event Filtering and Formatting
+
+  defp should_display_event?(event) do
+    case event do
+      # Filter out events with large payloads
+      {:agent_state_update, _state} -> false
+      {:agent_state_update, _middleware_id, _state} -> false
+      {:state_restored, _state} -> false
+      # Display all other events
+      _ -> true
+    end
+  end
+
+  # Helper to extract text preview from message content (handles both string and ContentPart list)
+  defp extract_content_preview(content) when is_binary(content) do
+    String.slice(content, 0, 100)
+  end
+
+  defp extract_content_preview(content) when is_list(content) do
+    # Extract text from ContentPart structs
+    content
+    |> Enum.filter(fn part -> is_map(part) && Map.get(part, :type) == :text end)
+    |> Enum.map(fn part -> Map.get(part, :content, "") end)
+    |> Enum.join(" ")
+    |> String.slice(0, 100)
+  end
+
+  defp extract_content_preview(content) do
+    inspect(content, limit: 100)
+  end
+
+  defp format_event_data(event) do
+    case event do
+      {:status_changed, status, _data} ->
+        %{
+          type: "status_changed",
+          status: to_string(status),
+          summary: "Agent status changed to #{status}"
+        }
+
+      {:llm_message, message} ->
+        content_preview = extract_content_preview(message.content)
+
+        %{
+          type: "llm_message",
+          role: to_string(message.role),
+          content_preview: content_preview,
+          summary: "LLM message (#{message.role})"
+        }
+
+      {:todos_updated, todos} ->
+        %{
+          type: "todos_updated",
+          count: length(todos),
+          summary: "TODOs updated (#{length(todos)} items)"
+        }
+
+      {:llm_deltas, deltas} ->
+        %{
+          type: "llm_deltas",
+          token_count: length(deltas),
+          delta_batches: 1,
+          summary: "Streaming tokens (#{length(deltas)} tokens in 1 batch)"
+        }
+
+      {:llm_token_usage, usage} ->
+        %{
+          type: "llm_token_usage",
+          usage: usage,
+          summary: "Token usage: #{inspect(usage)}"
+        }
+
+      {:conversation_title_generated, title, _agent_id} ->
+        %{
+          type: "conversation_title_generated",
+          title: title,
+          summary: "Title generated: #{title}"
+        }
+
+      {:middleware_action, middleware_module, action_data} ->
+        middleware_name = format_module_name(middleware_module)
+        action_summary = format_action_data(action_data)
+
+        %{
+          type: "middleware_action",
+          middleware: middleware_name,
+          action: action_summary,
+          summary: "#{middleware_name}: #{action_summary}"
+        }
+
+      {:agent_shutdown, data} ->
+        %{
+          type: "agent_shutdown",
+          reason: Map.get(data, :reason, "unknown"),
+          summary: "Agent shutting down: #{Map.get(data, :reason, "unknown")}"
+        }
+
+      other ->
+        # Generic fallback for unknown events
+        event_type = extract_event_type(other)
+
+        %{
+          type: event_type,
+          raw: inspect(other, limit: 100),
+          summary: "#{event_type} event"
+        }
+    end
+  end
+
+  defp format_action_data(action_data) when is_tuple(action_data) do
+    case action_data do
+      {action_name, data} when is_atom(action_name) ->
+        data_preview =
+          data
+          |> inspect(limit: 50)
+          |> String.slice(0, 100)
+
+        "#{action_name}: #{data_preview}"
+
+      _ ->
+        inspect(action_data, limit: 100)
+    end
+  end
+
+  defp format_action_data(action_data) do
+    inspect(action_data, limit: 100)
+  end
+
+  defp extract_event_type(event) when is_tuple(event) do
+    case event do
+      {type, _} when is_atom(type) -> to_string(type)
+      {type, _, _} when is_atom(type) -> to_string(type)
+      _ -> "unknown"
+    end
+  end
+
+  defp extract_event_type(_event), do: "unknown"
+
+  defp add_event_to_stream(socket, event, event_category) do
+    if should_display_event?(event) do
+      existing_events = socket.assigns[:event_stream] || []
+
+      # Special handling for delta events to prevent flooding
+      case event do
+        {:llm_deltas, deltas} ->
+          # Check if the last event is also a delta event
+          case existing_events do
+            [last_event | rest] when last_event.event.type == "llm_deltas" ->
+              # Update the existing delta event
+              updated_event = %{
+                last_event
+                | event: %{
+                    last_event.event
+                    | token_count: last_event.event.token_count + length(deltas),
+                      delta_batches: last_event.event.delta_batches + 1,
+                      summary:
+                        "Streaming tokens (#{last_event.event.token_count + length(deltas)} tokens in #{last_event.event.delta_batches + 1} batches)"
+                  },
+                  timestamp: DateTime.utc_now()
+              }
+
+              assign(socket, :event_stream, [updated_event | rest])
+
+            _ ->
+              # No previous delta event, add a new one
+              event_data = %{
+                id: System.unique_integer([:positive, :monotonic]),
+                category: event_category,
+                event: format_event_data(event),
+                raw_event: inspect(event, limit: 200),
+                timestamp: DateTime.utc_now()
+              }
+
+              new_events = [event_data | Enum.take(existing_events, 99)]
+              assign(socket, :event_stream, new_events)
+          end
+
+        _ ->
+          # Normal event, add to stream
+          event_data = %{
+            id: System.unique_integer([:positive, :monotonic]),
+            category: event_category,
+            event: format_event_data(event),
+            raw_event: inspect(event, limit: 200),
+            timestamp: DateTime.utc_now()
+          }
+
+          new_events = [event_data | Enum.take(existing_events, 99)]
+          assign(socket, :event_stream, new_events)
+      end
+    else
+      socket
+    end
+  end
 end
