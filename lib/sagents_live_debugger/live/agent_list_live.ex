@@ -4,6 +4,30 @@ defmodule SagentsLiveDebugger.AgentListLive do
   import SagentsLiveDebugger.CoreComponents
   alias SagentsLiveDebugger.{Discovery, Metrics, FilterForm}
 
+  # Event-Driven Architecture Notes:
+  #
+  # This LiveView uses a hybrid approach for updates:
+  #
+  # 1. Agent List View:
+  #    - Refreshes every 2 seconds via :refresh timer
+  #    - Shows agent discovery, status badges, metrics
+  #    - Subscribes to all agent regular topics for status updates
+  #
+  # 2. Agent Detail View:
+  #    - NO polling - entirely event-driven
+  #    - Subscribes to both regular and debug PubSub topics
+  #    - Real-time updates via handle_info event handlers:
+  #      - :todos_updated -> Updates TODOs tab
+  #      - :llm_message -> Updates Messages tab
+  #      - :status_changed -> Updates status in metadata
+  #      - :middleware_action -> Adds to Events stream
+  #      - All events -> Added to Events tab stream
+  #
+  # Subscription Management:
+  #    - Subscribe when entering detail view
+  #    - Unsubscribe when leaving detail view or switching agents
+  #    - Tracked via :subscribed_agent_id assign
+
   # 2 seconds
   @refresh_interval 2_000
 
@@ -158,9 +182,8 @@ defmodule SagentsLiveDebugger.AgentListLive do
   end
 
   def handle_info(:refresh, socket) do
-    # Refresh agent list
+    # Only refresh agent list and metrics
     agents = Discovery.list_agents(socket.assigns.coordinator)
-
     metrics = Metrics.calculate_metrics(agents)
 
     # Subscribe to any new conversation agents
@@ -183,13 +206,12 @@ defmodule SagentsLiveDebugger.AgentListLive do
       |> assign(:metrics, metrics)
       |> assign(:subscribed_topics, subscribed_topics)
 
-    # Also refresh agent detail if in detail view
-    socket =
-      if socket.assigns.view_mode == :detail && socket.assigns.selected_agent_id do
-        load_agent_detail(socket, socket.assigns.selected_agent_id)
-      else
-        socket
-      end
+    # NOTE: The detail view updates via PubSub events:
+    # - :todos_updated events update TODOs
+    # - :llm_message events update messages
+    # - :status_changed events update status
+    # - All events are captured in the Events tab
+    # This eliminates polling and provides real-time updates (<200ms latency)
 
     schedule_refresh()
 
