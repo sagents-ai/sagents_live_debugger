@@ -10,6 +10,7 @@ defmodule SagentsLiveDebugger.Layouts do
         <meta charset="utf-8" />
         <meta name="viewport" content="width=device-width, initial-scale=1" />
         <title>Agent Debugger</title>
+
         <style>
           <%= raw(css()) %>
         </style>
@@ -1096,7 +1097,17 @@ defmodule SagentsLiveDebugger.Layouts do
       color: white;
     }
 
+    .event-badge-std {
+      background: #3b82f6;
+      color: white;
+    }
+
     .event-badge-debug {
+      background: #8b5cf6;
+      color: white;
+    }
+
+    .event-badge-dbg {
       background: #8b5cf6;
       color: white;
     }
@@ -1104,6 +1115,24 @@ defmodule SagentsLiveDebugger.Layouts do
     .event-summary {
       font-size: 0.95rem;
       color: #1f2937;
+    }
+
+    .event-field-inline {
+      display: inline-flex;
+      gap: 8px;
+      margin-left: 8px;
+      font-size: 0.85rem;
+      font-family: monospace;
+    }
+
+    .token-input {
+      color: #059669;
+      font-weight: 500;
+    }
+
+    .token-output {
+      color: #dc2626;
+      font-weight: 500;
     }
 
     .event-item-meta {

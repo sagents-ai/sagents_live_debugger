@@ -36,6 +36,8 @@ defmodule SagentsLiveDebugger.AgentListLive do
     # Configuration comes from on_mount callback via socket assigns
     coordinator = socket.assigns.coordinator
     presence_module = socket.assigns.presence_module
+    # Ensure user_timezone is set (comes from SessionConfig, default to UTC if missing)
+    user_timezone = Map.get(socket.assigns, :user_timezone, "UTC")
 
     # Schedule periodic refresh
     if connected?(socket) do
@@ -63,6 +65,7 @@ defmodule SagentsLiveDebugger.AgentListLive do
 
     socket =
       socket
+      |> assign(:user_timezone, user_timezone)
       |> assign(:agents, agents)
       |> assign(:metrics, metrics)
       |> assign(:filter_changeset, filter_changeset)
@@ -106,6 +109,11 @@ defmodule SagentsLiveDebugger.AgentListLive do
       agent_id ->
         # Detail view
 
+        # Capture the previous selected agent BEFORE any updates to determine if we should clear events
+        # Use selected_agent_id (not subscribed_agent_id) because it's always set when viewing an agent,
+        # even if subscription fails
+        previous_selected_agent_id = socket.assigns[:selected_agent_id]
+
         # Unsubscribe from previous agent if different
         socket =
           if socket.assigns[:subscribed_agent_id] != agent_id do
@@ -138,13 +146,14 @@ defmodule SagentsLiveDebugger.AgentListLive do
           LangChain.Agents.AgentServer.touch(agent_id)
         end
 
-        # Load agent detail and clear/reset event stream
+        # Load agent detail
+        # Only clear event_stream when switching to a different agent
         socket =
           socket
           |> assign(:view_mode, :detail)
           |> assign(:selected_agent_id, agent_id)
           |> assign(:current_tab, current_tab)
-          |> assign(:event_stream, [])
+          |> maybe_clear_event_stream(previous_selected_agent_id, agent_id)
           |> load_agent_detail(agent_id)
 
         {:noreply, socket}
@@ -155,6 +164,16 @@ defmodule SagentsLiveDebugger.AgentListLive do
     if prev_agent_id = socket.assigns[:subscribed_agent_id] do
       unsubscribe_from_agent_events(prev_agent_id, socket.assigns.coordinator)
       assign(socket, :subscribed_agent_id, nil)
+    else
+      socket
+    end
+  end
+
+  defp maybe_clear_event_stream(socket, previous_agent_id, current_agent_id) do
+    # Only clear event_stream when switching to a different agent
+    # Keep events when switching tabs or reloading the same agent detail view
+    if previous_agent_id != current_agent_id do
+      assign(socket, :event_stream, [])
     else
       socket
     end
@@ -280,7 +299,7 @@ defmodule SagentsLiveDebugger.AgentListLive do
 
         socket
         |> assign(:agent_state, updated_state)
-        |> add_event_to_stream({:todos_updated, todos}, :regular)
+        |> add_event_to_stream({:todos_updated, todos}, :std)
       else
         socket
       end
@@ -298,7 +317,7 @@ defmodule SagentsLiveDebugger.AgentListLive do
 
         socket
         |> assign(:agent_state, updated_state)
-        |> add_event_to_stream({:llm_message, message}, :regular)
+        |> add_event_to_stream({:llm_message, message}, :std)
       else
         socket
       end
@@ -310,7 +329,7 @@ defmodule SagentsLiveDebugger.AgentListLive do
   def handle_info({:llm_deltas, deltas}, socket) do
     socket =
       if socket.assigns.view_mode == :detail do
-        add_event_to_stream(socket, {:llm_deltas, deltas}, :regular)
+        add_event_to_stream(socket, {:llm_deltas, deltas}, :std)
       else
         socket
       end
@@ -322,7 +341,7 @@ defmodule SagentsLiveDebugger.AgentListLive do
   def handle_info({:llm_token_usage, usage}, socket) do
     socket =
       if socket.assigns.view_mode == :detail do
-        add_event_to_stream(socket, {:llm_token_usage, usage}, :regular)
+        add_event_to_stream(socket, {:llm_token_usage, usage}, :std)
       else
         socket
       end
@@ -334,7 +353,7 @@ defmodule SagentsLiveDebugger.AgentListLive do
   def handle_info({:conversation_title_generated, title, agent_id}, socket) do
     socket =
       if socket.assigns.view_mode == :detail do
-        add_event_to_stream(socket, {:conversation_title_generated, title, agent_id}, :regular)
+        add_event_to_stream(socket, {:conversation_title_generated, title, agent_id}, :std)
       else
         socket
       end
@@ -374,11 +393,11 @@ defmodule SagentsLiveDebugger.AgentListLive do
   def handle_info(event, socket) when is_tuple(event) do
     socket =
       if socket.assigns.view_mode == :detail do
-        # Assume regular event unless it matches debug patterns
+        # Assume standard event unless it matches debug patterns
         category = if tuple_size(event) >= 1 && elem(event, 0) == :agent_state_update do
           :debug
         else
-          :regular
+          :std
         end
 
         add_event_to_stream(socket, event, category)
@@ -417,6 +436,20 @@ defmodule SagentsLiveDebugger.AgentListLive do
     # Navigate back to list view (remove query params)
     base_path = socket.assigns[:base_path] || ""
     {:noreply, push_patch(socket, to: base_path)}
+  end
+
+  def handle_event("set_timezone", %{"timezone" => timezone}, socket) do
+    case validate_timezone(timezone) do
+      {:ok, validated_tz} ->
+        {:noreply, assign(socket, :user_timezone, validated_tz)}
+
+      {:error, _reason} ->
+        {:noreply, socket}
+    end
+  end
+
+  def handle_event("set_timezone", _params, socket) do
+    {:noreply, socket}
   end
 
   defp schedule_refresh do
@@ -493,12 +526,36 @@ defmodule SagentsLiveDebugger.AgentListLive do
   end
 
   def render(assigns) do
-    case assigns.view_mode do
-      :list ->
-        render_list_view(assigns)
-      :detail ->
-        render_detail_view(assigns)
-    end
+    ~H"""
+    <!-- Hidden form for timezone submission - NOT in phx-update ignore so events work -->
+    <form id="sagents-tz-form" phx-change="set_timezone" style="display: none;">
+      <input type="hidden" id="sagents-tz-input" name="timezone" value="UTC" />
+    </form>
+
+    <!-- Timezone detection script - phx-update="ignore" prevents re-execution -->
+    <div phx-update="ignore" id="sagents-tz-script-container">
+      <script>
+        (function() {
+          // Wait for LiveView to finish loading
+          window.addEventListener('phx:page-loading-stop', function() {
+            const input = document.getElementById('sagents-tz-input');
+            if (input) {
+              const tz = Intl.DateTimeFormat().resolvedOptions().timeZone || 'UTC';
+              input.value = tz;
+              input.dispatchEvent(new Event('input', { bubbles: true }));
+            }
+          }, { once: true });
+        })();
+      </script>
+    </div>
+
+    <%= case @view_mode do %>
+      <% :list -> %>
+        <%= render_list_view(assigns) %>
+      <% :detail -> %>
+        <%= render_detail_view(assigns) %>
+    <% end %>
+    """
   end
 
   defp render_list_view(assigns) do
@@ -606,7 +663,7 @@ defmodule SagentsLiveDebugger.AgentListLive do
             <% :tools -> %>
               <.tools_tab agent={@agent_detail} />
             <% :events -> %>
-              <.events_tab event_stream={@event_stream} />
+              <.events_tab event_stream={@event_stream} user_timezone={@user_timezone} />
             <% :todos -> %>
               <.todos_tab state={@agent_state} />
           <% end %>
@@ -1251,7 +1308,7 @@ defmodule SagentsLiveDebugger.AgentListLive do
       <%= if @event_stream && @event_stream != [] do %>
         <div class="events-list">
           <%= for event_data <- @event_stream do %>
-            <.event_item event_data={event_data} />
+            <.event_item event_data={event_data} user_timezone={@user_timezone} />
           <% end %>
         </div>
       <% else %>
@@ -1281,13 +1338,19 @@ defmodule SagentsLiveDebugger.AgentListLive do
       >
         <div class="event-item-main">
           <span class={"event-badge event-badge-#{@event_data.category}"}>
-            <%= if @event_data.category == :debug, do: "DEBUG", else: "EVENT" %>
+            <%= if @event_data.category == :debug, do: "Dbg", else: "Std" %>
           </span>
           <span class="event-summary"><%= @event_data.event.summary %></span>
+          <%= if Map.has_key?(@event_data.event, :input) do %>
+            <span class="event-field-inline">
+              <span class="token-input">↓<%= @event_data.event.input %></span>
+              <span class="token-output">↑<%= @event_data.event.output %></span>
+            </span>
+          <% end %>
         </div>
         <div class="event-item-meta">
           <span class="event-timestamp">
-            <%= format_timestamp(@event_data.timestamp) %>
+            <%= format_timestamp(@event_data.timestamp, @user_timezone) %>
           </span>
           <span class="toggle-icon collapsed" id={@toggle_id}></span>
         </div>
@@ -1327,17 +1390,17 @@ defmodule SagentsLiveDebugger.AgentListLive do
             </div>
           <% end %>
 
-          <%= if Map.has_key?(@event_data.event, :token_count) do %>
+          <%= if Map.has_key?(@event_data.event, :char_count) do %>
             <div class="event-field">
-              <span class="event-label">Token Count:</span>
-              <span class="event-value"><%= @event_data.event.token_count %></span>
+              <span class="event-label">Character Count:</span>
+              <span class="event-value"><%= @event_data.event.char_count %></span>
             </div>
           <% end %>
 
-          <%= if Map.has_key?(@event_data.event, :delta_batches) do %>
+          <%= if Map.has_key?(@event_data.event, :merged_content) do %>
             <div class="event-field">
-              <span class="event-label">Delta Batches:</span>
-              <span class="event-value"><%= @event_data.event.delta_batches %></span>
+              <span class="event-label">Merged Content:</span>
+              <span class="event-value"><%= @event_data.event.merged_content %></span>
             </div>
           <% end %>
 
@@ -1351,10 +1414,19 @@ defmodule SagentsLiveDebugger.AgentListLive do
     """
   end
 
-  defp format_timestamp(datetime) do
-    datetime
-    |> DateTime.truncate(:second)
-    |> Calendar.strftime("%H:%M:%S")
+  defp format_timestamp(datetime, timezone) do
+    case DateTime.shift_zone(datetime, timezone) do
+      {:ok, shifted} ->
+        shifted
+        |> DateTime.truncate(:second)
+        |> Calendar.strftime("%H:%M:%S %Z")
+
+      {:error, _} ->
+        # Fallback to UTC if timezone shift fails
+        datetime
+        |> DateTime.truncate(:second)
+        |> Calendar.strftime("%H:%M:%S UTC")
+    end
   end
 
   # TODOs Tab
@@ -1695,39 +1767,58 @@ defmodule SagentsLiveDebugger.AgentListLive do
         %{
           type: "status_changed",
           status: to_string(status),
-          summary: "Agent status changed to #{status}"
+          summary: "Status: #{status}"
         }
 
       {:llm_message, message} ->
         content_preview = extract_content_preview(message.content)
+        # Limit to 60 chars for summary display
+        short_preview = String.slice(content_preview, 0, 60)
+        role_label = case message.role do
+          :user -> "User"
+          :assistant -> "Assistant"
+          _ -> String.capitalize(to_string(message.role))
+        end
 
         %{
           type: "llm_message",
           role: to_string(message.role),
-          content_preview: content_preview,
-          summary: "LLM message (#{message.role})"
+          content_preview: short_preview,
+          summary: "#{role_label}: #{short_preview}"
         }
 
       {:todos_updated, todos} ->
         %{
           type: "todos_updated",
           count: length(todos),
-          summary: "TODOs updated (#{length(todos)} items)"
+          summary: "TODOs: #{length(todos)}"
         }
 
       {:llm_deltas, deltas} ->
+        # Use merge_deltas to get the full merged content
+        # Handle empty deltas or nil result
+        merged = if deltas != [] do
+          LangChain.MessageDelta.merge_deltas(deltas)
+        else
+          nil
+        end
+
+        content = if merged, do: merged.content || "", else: ""
+        char_count = String.length(content)
+
         %{
           type: "llm_deltas",
-          token_count: length(deltas),
-          delta_batches: 1,
-          summary: "Streaming tokens (#{length(deltas)} tokens in 1 batch)"
+          merged_content: content,
+          char_count: char_count,
+          summary: "Streaming: #{char_count} chars"
         }
 
       {:llm_token_usage, usage} ->
         %{
           type: "llm_token_usage",
-          usage: usage,
-          summary: "Token usage: #{inspect(usage)}"
+          input: usage.input,
+          output: usage.output,
+          summary: "Tokens: #{usage.input} in / #{usage.output} out"
         }
 
       {:conversation_title_generated, title, _agent_id} ->
@@ -1806,15 +1897,26 @@ defmodule SagentsLiveDebugger.AgentListLive do
           # Check if the last event is also a delta event
           case existing_events do
             [last_event | rest] when last_event.event.type == "llm_deltas" ->
+              # Merge the new deltas with existing content
+              # Handle empty deltas or nil result
+              new_merged = if deltas != [] do
+                LangChain.MessageDelta.merge_deltas(deltas)
+              else
+                nil
+              end
+
+              new_content = if new_merged, do: new_merged.content || "", else: ""
+              combined_content = (last_event.event.merged_content || "") <> new_content
+              new_char_count = String.length(combined_content)
+
               # Update the existing delta event
               updated_event = %{
                 last_event
                 | event: %{
                     last_event.event
-                    | token_count: last_event.event.token_count + length(deltas),
-                      delta_batches: last_event.event.delta_batches + 1,
-                      summary:
-                        "Streaming tokens (#{last_event.event.token_count + length(deltas)} tokens in #{last_event.event.delta_batches + 1} batches)"
+                    | merged_content: combined_content,
+                      char_count: new_char_count,
+                      summary: "Streaming: #{new_char_count} chars"
                   },
                   timestamp: DateTime.utc_now()
               }
@@ -1852,4 +1954,13 @@ defmodule SagentsLiveDebugger.AgentListLive do
       socket
     end
   end
+
+  defp validate_timezone(timezone) when is_binary(timezone) do
+    case DateTime.shift_zone(DateTime.utc_now(), timezone) do
+      {:ok, _} -> {:ok, timezone}
+      {:error, _} -> {:error, :invalid_timezone}
+    end
+  end
+
+  defp validate_timezone(_), do: {:error, :invalid_timezone}
 end

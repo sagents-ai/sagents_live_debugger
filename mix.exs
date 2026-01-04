@@ -23,7 +23,8 @@ defmodule SagentsLiveDebugger.MixProject do
     [
       {:phoenix_live_view, "~> 1.0"},
       {:jason, "~> 1.4"},
-      {:langchain, path: "../my_langchain"}
+      {:langchain, path: "../my_langchain"},
+      {:tzdata, "~> 1.1"}
     ]
   end
 end
