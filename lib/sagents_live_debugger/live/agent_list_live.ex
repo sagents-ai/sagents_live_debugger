@@ -342,6 +342,19 @@ defmodule SagentsLiveDebugger.AgentListLive do
     {:noreply, socket}
   end
 
+  # Handler for wrapped debug events
+  # Debug events are wrapped with {:debug, event} tuple in AgentServer
+  def handle_info({:debug, event}, socket) do
+    socket =
+      if socket.assigns.view_mode == :detail do
+        add_event_to_stream(socket, event, :debug)
+      else
+        socket
+      end
+
+    {:noreply, socket}
+  end
+
   # Catch-all handler for debug events and other regular events
   # This needs to come AFTER specific handlers
   def handle_info({:middleware_action, _module, _action} = event, socket) do
