@@ -1390,17 +1390,10 @@ defmodule SagentsLiveDebugger.AgentListLive do
             </div>
           <% end %>
 
-          <%= if Map.has_key?(@event_data.event, :char_count) do %>
+          <%= if Map.has_key?(@event_data.event, :merged_delta) && @event_data.event.merged_delta do %>
             <div class="event-field">
-              <span class="event-label">Character Count:</span>
-              <span class="event-value"><%= @event_data.event.char_count %></span>
-            </div>
-          <% end %>
-
-          <%= if Map.has_key?(@event_data.event, :merged_content) do %>
-            <div class="event-field">
-              <span class="event-label">Merged Content:</span>
-              <span class="event-value"><%= @event_data.event.merged_content %></span>
+              <span class="event-label">Merged Delta:</span>
+              <pre class="event-raw"><%= inspect(@event_data.event.merged_delta, pretty: true, limit: :infinity) %></pre>
             </div>
           <% end %>
 
@@ -1795,22 +1788,13 @@ defmodule SagentsLiveDebugger.AgentListLive do
         }
 
       {:llm_deltas, deltas} ->
-        # Use merge_deltas to get the full merged content
-        # Handle empty deltas or nil result
-        merged = if deltas != [] do
-          LangChain.MessageDelta.merge_deltas(deltas)
-        else
-          nil
-        end
-
-        content = if merged, do: merged.content || "", else: ""
-        char_count = String.length(content)
-
+        # Normalize to list and merge with nil (first batch)
+        deltas = List.flatten([deltas])
+        merged_delta = LangChain.MessageDelta.merge_deltas(nil, deltas)
         %{
           type: "llm_deltas",
-          merged_content: content,
-          char_count: char_count,
-          summary: "Streaming: #{char_count} chars"
+          merged_delta: merged_delta,
+          summary: "Streaming..."
         }
 
       {:llm_token_usage, usage} ->
@@ -1894,37 +1878,28 @@ defmodule SagentsLiveDebugger.AgentListLive do
       # Special handling for delta events to prevent flooding
       case event do
         {:llm_deltas, deltas} ->
-          # Check if the last event is also a delta event
-          case existing_events do
-            [last_event | rest] when last_event.event.type == "llm_deltas" ->
-              # Merge the new deltas with existing content
-              # Handle empty deltas or nil result
-              new_merged = if deltas != [] do
-                LangChain.MessageDelta.merge_deltas(deltas)
-              else
-                nil
-              end
+          # Normalize deltas to a list
+          deltas = List.flatten([deltas])
 
-              new_content = if new_merged, do: new_merged.content || "", else: ""
-              combined_content = (last_event.event.merged_content || "") <> new_content
-              new_char_count = String.length(combined_content)
+          # Check if the latest event is also a delta event with an accumulated delta
+          case existing_events do
+            # When the latest event is a streaming delta, update and merge new events in
+            [%{event: %{type: "llm_deltas", merged_delta: prev_merged}} = last_event | rest]
+            when not is_nil(prev_merged) ->
+              # Use merge_deltas/2: pass accumulated delta + new batch
+              merged_delta = LangChain.MessageDelta.merge_deltas(prev_merged, deltas)
 
               # Update the existing delta event
               updated_event = %{
                 last_event
-                | event: %{
-                    last_event.event
-                    | merged_content: combined_content,
-                      char_count: new_char_count,
-                      summary: "Streaming: #{new_char_count} chars"
-                  },
+                | event: %{last_event.event | merged_delta: merged_delta},
                   timestamp: DateTime.utc_now()
               }
 
               assign(socket, :event_stream, [updated_event | rest])
 
             _ ->
-              # No previous delta event, add a new one
+              # No previous delta event, create new one using format_event_data
               event_data = %{
                 id: System.unique_integer([:positive, :monotonic]),
                 category: event_category,
