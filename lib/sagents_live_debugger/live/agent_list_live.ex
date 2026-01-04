@@ -1,5 +1,6 @@
 defmodule SagentsLiveDebugger.AgentListLive do
   use Phoenix.LiveView
+  require Logger
 
   import SagentsLiveDebugger.CoreComponents
   alias SagentsLiveDebugger.{Discovery, Metrics, FilterForm}
@@ -263,7 +264,6 @@ defmodule SagentsLiveDebugger.AgentListLive do
   # Handle agent shutdown events
   def handle_info({:agent_shutdown, shutdown_data}, socket) do
     # Log the shutdown for debugging
-    require Logger
     Logger.debug("Agent #{shutdown_data.agent_id} shutting down: #{shutdown_data.reason}")
 
     # The periodic refresh will remove the agent from the list
@@ -439,7 +439,8 @@ defmodule SagentsLiveDebugger.AgentListLive do
 
   # Subscribe to a presence topic
   defp subscribe_to_presence(pubsub_name, topic) do
-    Phoenix.PubSub.subscribe(pubsub_name, topic)
+    # Use LangChain.PubSub for automatic deduplication
+    LangChain.PubSub.subscribe(Phoenix.PubSub, pubsub_name, topic)
   end
 
   # Load agent detail data
