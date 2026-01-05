@@ -1343,8 +1343,8 @@ defmodule SagentsLiveDebugger.AgentListLive do
           <span class="event-summary"><%= @event_data.event.summary %></span>
           <%= if Map.has_key?(@event_data.event, :input) do %>
             <span class="event-field-inline">
-              <span class="token-input">↓<%= @event_data.event.input %></span>
-              <span class="token-output">↑<%= @event_data.event.output %></span>
+              <span class="token-input">↑<%= @event_data.event.input %></span>
+              <span class="token-output">↓<%= @event_data.event.output %></span>
             </span>
           <% end %>
         </div>
@@ -1790,11 +1790,13 @@ defmodule SagentsLiveDebugger.AgentListLive do
       {:llm_deltas, deltas} ->
         # Normalize to list and merge with nil (first batch)
         deltas = List.flatten([deltas])
+        delta_count = length(deltas)
         merged_delta = LangChain.MessageDelta.merge_deltas(nil, deltas)
         %{
           type: "llm_deltas",
           merged_delta: merged_delta,
-          summary: "Streaming..."
+          delta_count: delta_count,
+          summary: "Streaming: #{delta_count} deltas"
         }
 
       {:llm_token_usage, usage} ->
@@ -1802,7 +1804,7 @@ defmodule SagentsLiveDebugger.AgentListLive do
           type: "llm_token_usage",
           input: usage.input,
           output: usage.output,
-          summary: "Tokens: #{usage.input} in / #{usage.output} out"
+          summary: "Tokens:"
         }
 
       {:conversation_title_generated, title, _agent_id} ->
@@ -1884,15 +1886,16 @@ defmodule SagentsLiveDebugger.AgentListLive do
           # Check if the latest event is also a delta event with an accumulated delta
           case existing_events do
             # When the latest event is a streaming delta, update and merge new events in
-            [%{event: %{type: "llm_deltas", merged_delta: prev_merged}} = last_event | rest]
+            [%{event: %{type: "llm_deltas", merged_delta: prev_merged, delta_count: prev_count}} = last_event | rest]
             when not is_nil(prev_merged) ->
               # Use merge_deltas/2: pass accumulated delta + new batch
               merged_delta = LangChain.MessageDelta.merge_deltas(prev_merged, deltas)
+              new_count = prev_count + length(deltas)
 
               # Update the existing delta event
               updated_event = %{
                 last_event
-                | event: %{last_event.event | merged_delta: merged_delta},
+                | event: %{last_event.event | merged_delta: merged_delta, delta_count: new_count, summary: "Streaming: #{new_count} deltas"},
                   timestamp: DateTime.utc_now()
               }
 

@@ -1126,12 +1126,12 @@ defmodule SagentsLiveDebugger.Layouts do
     }
 
     .token-input {
-      color: #059669;
+      color: #3b82f6;  /* Blue for input (tokens sent to LLM) */
       font-weight: 500;
     }
 
     .token-output {
-      color: #dc2626;
+      color: #a855f7;  /* Purple for output (tokens received from LLM) */
       font-weight: 500;
     }
 
