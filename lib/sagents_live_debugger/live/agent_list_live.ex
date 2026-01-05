@@ -1754,6 +1754,16 @@ defmodule SagentsLiveDebugger.AgentListLive do
     inspect(content, limit: 100)
   end
 
+  # Helper to extract text preview from content parts (for Issue #3)
+  defp extract_text_preview(content_parts) do
+    content_parts
+    |> Enum.find_value("", fn
+      %{type: :text, content: text} when is_binary(text) -> String.slice(text, 0, 50)
+      text when is_binary(text) -> String.slice(text, 0, 50)
+      _ -> nil
+    end)
+  end
+
   defp format_event_data(event) do
     case event do
       {:status_changed, status, _data} ->
@@ -1763,15 +1773,85 @@ defmodule SagentsLiveDebugger.AgentListLive do
           summary: "Status: #{status}"
         }
 
+      # Issue #2: Tool Result Messages - handle :tool role with tool_results
+      {:llm_message, %LangChain.Message{role: :tool, tool_results: tool_results} = message}
+      when is_list(tool_results) and length(tool_results) > 0 ->
+        # Extract tool names and error status
+        result_summaries =
+          Enum.map(tool_results, fn result ->
+            name = Map.get(result, :name, "unknown")
+            is_error = Map.get(result, :is_error, false)
+            status = if is_error, do: "✗", else: "✓"
+            "#{name} #{status}"
+          end)
+
+        summary = "Tool Results: #{Enum.join(result_summaries, ", ")}"
+
+        %{
+          type: "llm_message",
+          role: "tool",
+          tool_results: tool_results,
+          summary: summary,
+          raw: message
+        }
+
+      # Issue #3: Assistant Tool Calls - handle :assistant role with enhanced display
+      {:llm_message, %LangChain.Message{role: :assistant} = message} ->
+        tool_calls = message.tool_calls || []
+        content_parts = List.wrap(message.content || [])
+
+        # Check for thinking content
+        has_thinking =
+          Enum.any?(content_parts, fn
+            %{type: :thinking} -> true
+            _ -> false
+          end)
+
+        # Check for text content and get preview
+        text_preview = extract_text_preview(content_parts)
+        has_text = text_preview != ""
+
+        # Build summary parts list
+        parts = []
+        parts = if has_thinking, do: parts ++ ["[thinking]"], else: parts
+        parts = if has_text, do: parts ++ ["[text]"], else: parts
+
+        # Add tool names if present
+        tool_names =
+          if tool_calls != [] do
+            Enum.map(tool_calls, & &1.name) |> Enum.join(", ")
+          else
+            nil
+          end
+
+        parts = if tool_names, do: parts ++ [tool_names], else: parts
+
+        summary = "Assistant: " <> Enum.join(parts, " ")
+
+        %{
+          type: "llm_message",
+          role: "assistant",
+          tool_calls: tool_calls,
+          content: content_parts,
+          has_thinking: has_thinking,
+          has_text: has_text,
+          text_preview: text_preview,
+          summary: summary,
+          raw: message
+        }
+
+      # Generic handler for other message roles (user, system, etc.)
       {:llm_message, message} ->
         content_preview = extract_content_preview(message.content)
         # Limit to 60 chars for summary display
         short_preview = String.slice(content_preview, 0, 60)
-        role_label = case message.role do
-          :user -> "User"
-          :assistant -> "Assistant"
-          _ -> String.capitalize(to_string(message.role))
-        end
+
+        role_label =
+          case message.role do
+            :user -> "User"
+            :assistant -> "Assistant"
+            _ -> String.capitalize(to_string(message.role))
+          end
 
         %{
           type: "llm_message",
@@ -1830,6 +1910,53 @@ defmodule SagentsLiveDebugger.AgentListLive do
           type: "agent_shutdown",
           reason: Map.get(data, :reason, "unknown"),
           summary: "Agent shutting down: #{Map.get(data, :reason, "unknown")}"
+        }
+
+      # Issue #5: display_message_saved - enhanced formatting
+      {:display_message_saved, display_message} ->
+        # Safely extract fields - schema may vary by application
+        message_type = Map.get(display_message, :message_type, "unknown")
+        content_type = Map.get(display_message, :content_type, "unknown")
+        content = Map.get(display_message, :content, %{})
+
+        # Build summary based on content_type
+        suffix =
+          case content_type do
+            "tool_call" ->
+              tool_name = get_in(content, ["name"]) || "unknown"
+              ": #{tool_name}"
+
+            "tool_result" ->
+              tool_name = get_in(content, ["name"]) || "unknown"
+              is_error = get_in(content, ["is_error"]) || false
+              status = if is_error, do: "✗", else: "✓"
+              ": #{tool_name} #{status}"
+
+            "thinking" ->
+              # Optional: add short preview
+              text = get_in(content, ["text"]) || ""
+
+              preview =
+                if String.length(text) > 30 do
+                  String.slice(text, 0, 30) <> "..."
+                else
+                  text
+                end
+
+              if preview != "", do: " - #{preview}", else: ""
+
+            _ ->
+              ""
+          end
+
+        summary = "Saved #{message_type} #{content_type}#{suffix}"
+
+        %{
+          type: "display_message_saved",
+          message_type: message_type,
+          content_type: content_type,
+          summary: summary,
+          raw: display_message
         }
 
       other ->
