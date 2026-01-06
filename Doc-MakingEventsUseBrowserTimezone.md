@@ -97,13 +97,19 @@ setTimeout(() => dispatchTimezoneEvent(), 100);
 
 ## The Working Solution
 
-### Key Insight
+### Key Insights
 
 Use a **hidden button with `phx-click`** and dynamically set `phx-value-*` attributes before programmatically clicking it. This works because:
 
 1. `phx-click` is a core LiveView binding that reliably sends events
 2. `phx-value-*` attributes are read at click time, so dynamic values work
-3. `phx:page-loading-stop` event ensures LiveView is fully connected before clicking
+3. `phx:page-loading-stop` event signals LiveView is connected
+
+However, there are two critical timing issues that must be addressed:
+
+1. **Event binding timing**: Even after `phx:page-loading-stop` fires, LiveView's event bindings may not be fully active. A `requestAnimationFrame` + `setTimeout` combination is needed.
+
+2. **LiveView reconnects**: When the server restarts and the browser reconnects, `phx:page-loading-stop` fires again. Using `{ once: true }` would miss these reconnects.
 
 ### Implementation
 
@@ -121,21 +127,29 @@ The button must be **outside** any `phx-update="ignore"` container so LiveView c
 <div phx-update="ignore" id="tz-script-container">
   <script>
     (function() {
-      // Wait for LiveView to finish loading
+      // Listen for EVERY phx:page-loading-stop (initial load AND reconnects)
+      // Do NOT use { once: true } - it would break on reconnects
       window.addEventListener('phx:page-loading-stop', function() {
-        const tz = Intl.DateTimeFormat().resolvedOptions().timeZone || 'UTC';
-        const btn = document.getElementById('sagents-tz-btn');
-        if (btn) {
-          btn.setAttribute('phx-value-timezone', tz);
-          btn.click();
-        }
-      }, { once: true });
+        // Use requestAnimationFrame + setTimeout for reliable timing
+        // RAF ensures we're past the current render cycle
+        // setTimeout adds buffer for LiveView event bindings to be fully active
+        requestAnimationFrame(function() {
+          setTimeout(function() {
+            const tz = Intl.DateTimeFormat().resolvedOptions().timeZone || 'UTC';
+            const btn = document.getElementById('sagents-tz-btn');
+            if (btn) {
+              btn.setAttribute('phx-value-timezone', tz);
+              btn.click();
+            }
+          }, 100);
+        });
+      });
     })();
   </script>
 </div>
 ```
 
-The script is inside `phx-update="ignore"` to prevent re-execution on LiveView re-renders.
+The script is inside `phx-update="ignore"` to prevent re-execution on LiveView re-renders (but the event listener persists and handles reconnects).
 
 #### 3. Event Handler
 
@@ -197,12 +211,35 @@ This Phoenix LiveView event fires when:
 - The initial page load completes
 - LiveView WebSocket is connected
 - The DOM is ready for interaction
+- **Also fires on reconnects** (e.g., after server restart)
 
-Using `{ once: true }` ensures the listener only fires once.
+### Why NOT use { once: true }?
+
+The `{ once: true }` option removes the event listener after it fires once. This breaks on **LiveView reconnects**:
+
+1. User opens page → listener fires → timezone set ✓
+2. Server restarts → LiveView reconnects
+3. `phx:page-loading-stop` fires again
+4. But listener was removed → timezone not set ✗
+5. Page shows UTC instead of local time
+
+**Solution**: Don't use `{ once: true }`. Setting the timezone multiple times is harmless (idempotent).
+
+### Why requestAnimationFrame + setTimeout?
+
+Even after `phx:page-loading-stop` fires, LiveView's event bindings may not be fully active. Testing showed that clicking the button immediately often failed silently.
+
+- **requestAnimationFrame**: Ensures we're past the current browser render cycle
+- **setTimeout(100)**: Adds buffer time for LiveView to fully wire up event bindings
+
+This combination proved reliable across initial loads and reconnects.
 
 ### Why phx-update="ignore" for the Script?
 
-Without this, LiveView would re-execute the script on every re-render, potentially sending the timezone event multiple times or at unexpected times.
+Without this, LiveView would re-execute the script on every re-render, adding duplicate event listeners. With `phx-update="ignore"`:
+- Script runs once on initial page load
+- Event listener persists and handles all `phx:page-loading-stop` events
+- No duplicate listeners accumulate
 
 ### Why the Button Outside phx-update="ignore"?
 
@@ -221,5 +258,7 @@ For self-contained LiveView plugins that need browser-side data:
 1. Use a **hidden button with `phx-click`**
 2. Set **`phx-value-*` attributes dynamically** before clicking
 3. Wait for **`phx:page-loading-stop`** to ensure LiveView is connected
-4. Keep the **button outside** and **script inside** `phx-update="ignore"`
-5. Always **validate** client-provided data server-side
+4. Use **requestAnimationFrame + setTimeout** for reliable event binding timing
+5. **Don't use `{ once: true }`** - allow listener to handle reconnects
+6. Keep the **button outside** and **script inside** `phx-update="ignore"`
+7. Always **validate** client-provided data server-side

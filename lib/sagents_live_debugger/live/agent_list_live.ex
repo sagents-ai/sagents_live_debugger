@@ -439,23 +439,17 @@ defmodule SagentsLiveDebugger.AgentListLive do
   end
 
   # Handle timezone from phx-click with phx-value-timezone
-  def handle_event("set_timezone", %{"timezone" => timezone} = params, socket) do
-    Logger.info("[Sagents TZ] Received set_timezone event with timezone: '#{timezone}'")
-    Logger.info("[Sagents TZ] Full params: #{inspect(params)}")
-
+  def handle_event("set_timezone", %{"timezone" => timezone}, socket) do
     case validate_timezone(timezone) do
       {:ok, validated_tz} ->
-        Logger.info("[Sagents TZ] Timezone validated, setting user_timezone to: '#{validated_tz}'")
         {:noreply, assign(socket, :user_timezone, validated_tz)}
 
-      {:error, reason} ->
-        Logger.warning("[Sagents TZ] Timezone validation failed: #{inspect(reason)}")
+      {:error, _reason} ->
         {:noreply, socket}
     end
   end
 
-  def handle_event("set_timezone", params, socket) do
-    Logger.warning("[Sagents TZ] Received set_timezone with unexpected params: #{inspect(params)}")
+  def handle_event("set_timezone", _params, socket) do
     {:noreply, socket}
   end
 
@@ -541,25 +535,21 @@ defmodule SagentsLiveDebugger.AgentListLive do
     <div phx-update="ignore" id="sagents-tz-script-container">
       <script>
         (function() {
-          console.log('[Sagents TZ] Script starting...');
-          console.log('[Sagents TZ] Adding phx:page-loading-stop listener');
-          // Wait for LiveView to finish loading
+          // Listen for every phx:page-loading-stop (initial load AND reconnects)
           window.addEventListener('phx:page-loading-stop', function() {
-            console.log('[Sagents TZ] phx:page-loading-stop event fired!');
-            const tz = Intl.DateTimeFormat().resolvedOptions().timeZone || 'UTC';
-            console.log('[Sagents TZ] Detected timezone:', tz);
-            const btn = document.getElementById('sagents-tz-btn');
-            if (btn) {
-              console.log('[Sagents TZ] Found button, setting phx-value-timezone');
-              btn.setAttribute('phx-value-timezone', tz);
-              console.log('[Sagents TZ] Clicking button...');
-              btn.click();
-              console.log('[Sagents TZ] Button clicked');
-            } else {
-              console.log('[Sagents TZ] ERROR: Button not found!');
-            }
-          }, { once: true });
-          console.log('[Sagents TZ] Script setup complete');
+            // Use requestAnimationFrame + setTimeout for reliable timing
+            // RAF ensures we're past the current render, setTimeout adds buffer for LiveView bindings
+            requestAnimationFrame(function() {
+              setTimeout(function() {
+                const tz = Intl.DateTimeFormat().resolvedOptions().timeZone || 'UTC';
+                const btn = document.getElementById('sagents-tz-btn');
+                if (btn) {
+                  btn.setAttribute('phx-value-timezone', tz);
+                  btn.click();
+                }
+              }, 100);
+            });
+          });
         })();
       </script>
     </div>
