@@ -239,7 +239,7 @@ defmodule SagentsLiveDebugger.AgentListLive do
   end
 
   # Handle agent status change events (for detail view)
-  def handle_info({:status_changed, new_status, _data}, socket) do
+  def handle_info({:agent, {:status_changed, new_status, _data}}, socket) do
     if socket.assigns.view_mode == :detail && socket.assigns.agent_metadata do
       updated_metadata = Map.put(socket.assigns.agent_metadata, :status, new_status)
       {:noreply, assign(socket, :agent_metadata, updated_metadata)}
@@ -281,7 +281,7 @@ defmodule SagentsLiveDebugger.AgentListLive do
   end
 
   # Handle agent shutdown events
-  def handle_info({:agent_shutdown, shutdown_data}, socket) do
+  def handle_info({:agent, {:agent_shutdown, shutdown_data}}, socket) do
     # Log the shutdown for debugging
     Logger.debug("Agent #{shutdown_data.agent_id} shutting down: #{shutdown_data.reason}")
 
@@ -291,7 +291,7 @@ defmodule SagentsLiveDebugger.AgentListLive do
   end
 
   # Handle todos_updated events
-  def handle_info({:todos_updated, todos}, socket) do
+  def handle_info({:agent, {:todos_updated, todos}}, socket) do
     socket =
       if socket.assigns.view_mode == :detail && socket.assigns.agent_state do
         # Update the agent state with new todos
@@ -308,7 +308,7 @@ defmodule SagentsLiveDebugger.AgentListLive do
   end
 
   # Handle llm_message events
-  def handle_info({:llm_message, message}, socket) do
+  def handle_info({:agent, {:llm_message, message}}, socket) do
     socket =
       if socket.assigns.view_mode == :detail && socket.assigns.agent_state do
         # Append message to state
@@ -326,7 +326,7 @@ defmodule SagentsLiveDebugger.AgentListLive do
   end
 
   # Handle llm_deltas events (streaming tokens)
-  def handle_info({:llm_deltas, deltas}, socket) do
+  def handle_info({:agent, {:llm_deltas, deltas}}, socket) do
     socket =
       if socket.assigns.view_mode == :detail do
         add_event_to_stream(socket, {:llm_deltas, deltas}, :std)
@@ -338,7 +338,7 @@ defmodule SagentsLiveDebugger.AgentListLive do
   end
 
   # Handle llm_token_usage events
-  def handle_info({:llm_token_usage, usage}, socket) do
+  def handle_info({:agent, {:llm_token_usage, usage}}, socket) do
     socket =
       if socket.assigns.view_mode == :detail do
         add_event_to_stream(socket, {:llm_token_usage, usage}, :std)
@@ -350,7 +350,7 @@ defmodule SagentsLiveDebugger.AgentListLive do
   end
 
   # Handle conversation_title_generated events
-  def handle_info({:conversation_title_generated, title, agent_id}, socket) do
+  def handle_info({:agent, {:conversation_title_generated, title, agent_id}}, socket) do
     socket =
       if socket.assigns.view_mode == :detail do
         add_event_to_stream(socket, {:conversation_title_generated, title, agent_id}, :std)
@@ -362,8 +362,8 @@ defmodule SagentsLiveDebugger.AgentListLive do
   end
 
   # Handler for wrapped debug events
-  # Debug events are wrapped with {:debug, event} tuple in AgentServer
-  def handle_info({:debug, event}, socket) do
+  # Debug events are wrapped with {:agent, {:debug, event}} tuple in AgentServer
+  def handle_info({:agent, {:debug, event}}, socket) do
     socket =
       if socket.assigns.view_mode == :detail do
         add_event_to_stream(socket, event, :debug)
@@ -374,23 +374,9 @@ defmodule SagentsLiveDebugger.AgentListLive do
     {:noreply, socket}
   end
 
-  # Catch-all handler for debug events and other regular events
-  # This needs to come AFTER specific handlers
-  def handle_info({:middleware_action, _module, _action} = event, socket) do
-    socket =
-      if socket.assigns.view_mode == :detail do
-        # Middleware actions are debug events
-        add_event_to_stream(socket, event, :debug)
-      else
-        socket
-      end
-
-    {:noreply, socket}
-  end
-
-  # Generic catch-all for any other tuple events
-  # This should be the LAST handle_info clause for events
-  def handle_info(event, socket) when is_tuple(event) do
+  # Catch-all handler for any other agent events not specifically handled above
+  # This should be the LAST handle_info clause for agent events
+  def handle_info({:agent, event}, socket) when is_tuple(event) do
     socket =
       if socket.assigns.view_mode == :detail do
         # Assume standard event unless it matches debug patterns
