@@ -6,6 +6,7 @@ defmodule SagentsLiveDebugger.MixProject do
       app: :sagents_live_debugger,
       version: "0.1.0",
       elixir: "~> 1.19",
+      aliases: aliases(),
       start_permanent: Mix.env() == :prod,
       deps: deps()
     ]
@@ -18,6 +19,12 @@ defmodule SagentsLiveDebugger.MixProject do
     ]
   end
 
+  def cli do
+    [
+      preferred_envs: [precommit: :test]
+    ]
+  end
+
   # Run "mix help deps" to learn about dependencies.
   defp deps do
     [
@@ -25,6 +32,18 @@ defmodule SagentsLiveDebugger.MixProject do
       {:jason, "~> 1.4"},
       {:langchain, path: "../my_langchain"},
       {:tzdata, "~> 1.1"}
+    ]
+  end
+
+  # Aliases are shortcuts or tasks specific to the current project.
+  # For example, before performing a commit, run the following checks:
+  #
+  #     $ mix precommit
+  #
+  # See the documentation for `Mix` for more info on aliases.
+  defp aliases do
+    [
+      precommit: ["compile --warning-as-errors", "deps.unlock --unused", "format", "test"]
     ]
   end
 end
