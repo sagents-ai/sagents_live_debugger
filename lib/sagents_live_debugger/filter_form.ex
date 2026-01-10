@@ -58,15 +58,18 @@ defmodule SagentsLiveDebugger.FilterForm do
 
   # Filter by agent status
   defp filter_by_status(agents, :all), do: agents
+
   defp filter_by_status(agents, status) do
     Enum.filter(agents, fn agent -> agent.status == status end)
   end
 
   # Filter by viewer presence
   defp filter_by_presence(agents, :all), do: agents
+
   defp filter_by_presence(agents, :has_viewers) do
     Enum.filter(agents, fn agent -> agent.viewer_count > 0 end)
   end
+
   defp filter_by_presence(agents, :no_viewers) do
     Enum.filter(agents, fn agent -> agent.viewer_count == 0 end)
   end
@@ -74,8 +77,10 @@ defmodule SagentsLiveDebugger.FilterForm do
   # Filter by search query (searches in agent_id)
   defp filter_by_search(agents, ""), do: agents
   defp filter_by_search(agents, nil), do: agents
+
   defp filter_by_search(agents, query) do
     query_lower = String.downcase(query)
+
     Enum.filter(agents, fn agent ->
       String.contains?(String.downcase(agent.agent_id), query_lower)
     end)
@@ -83,12 +88,16 @@ defmodule SagentsLiveDebugger.FilterForm do
 
   # Sort agents
   defp sort_agents(agents, :last_activity) do
-    Enum.sort_by(agents, fn agent ->
-      case agent.last_activity do
-        nil -> ~U[1970-01-01 00:00:00Z]
-        datetime -> datetime
-      end
-    end, {:desc, DateTime})
+    Enum.sort_by(
+      agents,
+      fn agent ->
+        case agent.last_activity do
+          nil -> ~U[1970-01-01 00:00:00Z]
+          datetime -> datetime
+        end
+      end,
+      {:desc, DateTime}
+    )
   end
 
   defp sort_agents(agents, :viewers) do
@@ -96,8 +105,12 @@ defmodule SagentsLiveDebugger.FilterForm do
   end
 
   defp sort_agents(agents, :uptime) do
-    Enum.sort_by(agents, fn agent ->
-      agent.uptime_ms || 0
-    end, :desc)
+    Enum.sort_by(
+      agents,
+      fn agent ->
+        agent.uptime_ms || 0
+      end,
+      :desc
+    )
   end
 end

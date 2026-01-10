@@ -16,7 +16,7 @@ defmodule SagentsLiveDebugger.Layouts do
         </style>
       </head>
       <body>
-        <%= @inner_content %>
+        {@inner_content}
       </body>
     </html>
     """

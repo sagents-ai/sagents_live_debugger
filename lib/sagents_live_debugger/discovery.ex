@@ -44,10 +44,11 @@ defmodule SagentsLiveDebugger.Discovery do
     pid = AgentServer.get_pid(agent_id)
 
     # Get metadata from AgentServer if available
-    metadata = case AgentServer.get_metadata(agent_id) do
-      {:ok, meta} -> meta
-      {:error, _} -> %{}
-    end
+    metadata =
+      case AgentServer.get_metadata(agent_id) do
+        {:ok, meta} -> meta
+        {:error, _} -> %{}
+      end
 
     # Get uptime if running
     uptime_ms = if pid, do: get_uptime(pid), else: nil
