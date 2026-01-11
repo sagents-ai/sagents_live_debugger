@@ -132,14 +132,16 @@ defmodule SagentsLiveDebugger.AgentListLive do
 
         # Get tab from params
         tab = Map.get(params, "tab", "overview")
-        current_tab = case tab do
-          "messages" -> :messages
-          "middleware" -> :middleware
-          "tools" -> :tools
-          "todos" -> :todos
-          "events" -> :events
-          _ -> :overview
-        end
+
+        current_tab =
+          case tab do
+            "messages" -> :messages
+            "middleware" -> :middleware
+            "tools" -> :tools
+            "todos" -> :todos
+            "events" -> :events
+            _ -> :overview
+          end
 
         # Touch the agent to reset inactivity timer
         if connected?(socket) do
@@ -189,6 +191,7 @@ defmodule SagentsLiveDebugger.AgentListLive do
       {:error, :process_not_found} ->
         # Agent doesn't exist, don't subscribe
         socket
+
       {:error, _reason} ->
         # Other error (e.g., no pubsub configured), don't subscribe
         socket
@@ -380,11 +383,12 @@ defmodule SagentsLiveDebugger.AgentListLive do
     socket =
       if socket.assigns.view_mode == :detail do
         # Assume standard event unless it matches debug patterns
-        category = if tuple_size(event) >= 1 && elem(event, 0) == :agent_state_update do
-          :debug
-        else
-          :std
-        end
+        category =
+          if tuple_size(event) >= 1 && elem(event, 0) == :agent_state_update do
+            :debug
+          else
+            :std
+          end
 
         add_event_to_stream(socket, event, category)
       else
@@ -478,22 +482,25 @@ defmodule SagentsLiveDebugger.AgentListLive do
 
   # Load agent detail data
   defp load_agent_detail(socket, agent_id) do
-    metadata = case LangChain.Agents.AgentServer.get_metadata(agent_id) do
-      {:ok, meta} -> meta
-      {:error, _} -> nil
-    end
+    metadata =
+      case LangChain.Agents.AgentServer.get_metadata(agent_id) do
+        {:ok, meta} -> meta
+        {:error, _} -> nil
+      end
 
     # get_state returns State.t() directly, not a tuple
-    state = try do
-      LangChain.Agents.AgentServer.get_state(agent_id)
-    catch
-      :exit, _ -> nil
-    end
+    state =
+      try do
+        LangChain.Agents.AgentServer.get_state(agent_id)
+      catch
+        :exit, _ -> nil
+      end
 
-    agent = case LangChain.Agents.AgentServer.get_agent(agent_id) do
-      {:ok, agent} -> agent
-      {:error, _} -> nil
-    end
+    agent =
+      case LangChain.Agents.AgentServer.get_agent(agent_id) do
+        {:ok, agent} -> agent
+        {:error, _} -> nil
+      end
 
     socket
     |> assign(:agent_detail, agent)
@@ -542,9 +549,9 @@ defmodule SagentsLiveDebugger.AgentListLive do
 
     <%= case @view_mode do %>
       <% :list -> %>
-        <%= render_list_view(assigns) %>
+        {render_list_view(assigns)}
       <% :detail -> %>
-        <%= render_detail_view(assigns) %>
+        {render_detail_view(assigns)}
     <% end %>
     """
   end
@@ -569,14 +576,14 @@ defmodule SagentsLiveDebugger.AgentListLive do
       <header class="header">
         <h1>Agent Debug Dashboard</h1>
       </header>
-
-      <!-- System Overview Panel -->
+      
+    <!-- System Overview Panel -->
       <.system_overview metrics={@metrics} />
-
-      <!-- Filters -->
+      
+    <!-- Filters -->
       <.filter_controls form={@form} />
-
-      <!-- Active Agent List -->
+      
+    <!-- Active Agent List -->
       <.agent_table agents={@filtered_agents} />
     </div>
     """
@@ -588,14 +595,14 @@ defmodule SagentsLiveDebugger.AgentListLive do
       <%= if is_nil(@agent_detail) do %>
         <div class="agent-not-found">
           <h2>Agent Not Found</h2>
-          <p>Agent <%= @selected_agent_id %> doesn't appear to be active.</p>
+          <p>Agent {@selected_agent_id} doesn't appear to be active.</p>
           <p class="text-muted">It may have stopped or completed its work.</p>
           <button phx-click="back_to_list" class="btn-back">← Back to Agent List</button>
         </div>
       <% else %>
         <div class="agent-detail-header">
           <button phx-click="back_to_list" class="btn-back">← Back to List</button>
-          <h2>Agent: <%= @selected_agent_id %></h2>
+          <h2>Agent: {@selected_agent_id}</h2>
         </div>
 
         <div class="agent-detail-tabs">
@@ -794,7 +801,7 @@ defmodule SagentsLiveDebugger.AgentListLive do
       <td>
         <div class="conv-id">
           <span class="conv-id-icon">
-            <%= status_emoji(@agent.status) %>
+            {status_emoji(@agent.status)}
           </span>
           <span>{@agent.agent_id}</span>
         </div>
@@ -806,10 +813,10 @@ defmodule SagentsLiveDebugger.AgentListLive do
       </td>
       <td>
         <span class="status-badge">
-          <%= status_text(@agent.status) %>
+          {status_text(@agent.status)}
         </span>
         <div class="status-desc">
-          <%= status_description(@agent.status) %>
+          {status_description(@agent.status)}
         </div>
       </td>
       <td>
@@ -819,14 +826,14 @@ defmodule SagentsLiveDebugger.AgentListLive do
       </td>
       <td class="text-gray">
         <%= if @agent.last_activity do %>
-          <%= format_time_ago(@agent.last_activity) %>
+          {format_time_ago(@agent.last_activity)}
         <% else %>
           <span class="text-muted">—</span>
         <% end %>
       </td>
       <td class="text-gray">
         <%= if @agent.uptime_ms do %>
-          <%= format_duration(@agent.uptime_ms) %>
+          {format_duration(@agent.uptime_ms)}
         <% else %>
           <span class="text-muted">—</span>
         <% end %>
@@ -926,18 +933,18 @@ defmodule SagentsLiveDebugger.AgentListLive do
       <div class="info-card">
         <div class="info-row">
           <span class="info-label">Agent ID:</span>
-          <span class="info-value"><%= @agent.agent_id %></span>
+          <span class="info-value">{@agent.agent_id}</span>
         </div>
         <%= if @metadata.conversation_id do %>
           <div class="info-row">
             <span class="info-label">Conversation ID:</span>
-            <span class="info-value"><%= @metadata.conversation_id %></span>
+            <span class="info-value">{@metadata.conversation_id}</span>
           </div>
         <% end %>
         <%= if @agent.name do %>
           <div class="info-row">
             <span class="info-label">Agent Name:</span>
-            <span class="info-value"><%= @agent.name %></span>
+            <span class="info-value">{@agent.name}</span>
           </div>
         <% end %>
       </div>
@@ -953,14 +960,14 @@ defmodule SagentsLiveDebugger.AgentListLive do
         <div class="info-row">
           <span class="info-label">Status:</span>
           <span class="info-value">
-            <%= status_emoji(@metadata.status) %>
-            <%= detail_status_description(@metadata.status) %>
+            {status_emoji(@metadata.status)}
+            {detail_status_description(@metadata.status)}
           </span>
         </div>
         <%= if @metadata.last_activity_at do %>
           <div class="info-row">
             <span class="info-label">Last Activity:</span>
-            <span class="info-value"><%= detail_format_time_ago(@metadata.last_activity_at) %></span>
+            <span class="info-value">{detail_format_time_ago(@metadata.last_activity_at)}</span>
           </div>
         <% end %>
       </div>
@@ -971,7 +978,7 @@ defmodule SagentsLiveDebugger.AgentListLive do
   defp middleware_section(assigns) do
     ~H"""
     <div class="info-section">
-      <h3>🔧 Middleware (<%= length(@agent.middleware) %>)</h3>
+      <h3>🔧 Middleware ({length(@agent.middleware)})</h3>
       <%= if Enum.empty?(@agent.middleware) do %>
         <p class="empty-state">No middleware configured</p>
       <% else %>
@@ -1008,7 +1015,7 @@ defmodule SagentsLiveDebugger.AgentListLive do
           |> Phoenix.LiveView.JS.toggle_class("collapsed", to: "##{@toggle_id}")
         }
       >
-        <span class="list-item-name"><%= format_module_name(@entry.id) %></span>
+        <span class="list-item-name">{format_module_name(@entry.id)}</span>
         <span class="toggle-icon collapsed" id={@toggle_id}></span>
       </div>
 
@@ -1047,7 +1054,7 @@ defmodule SagentsLiveDebugger.AgentListLive do
         }
       >
         <span class="config-label">🤖 Model</span>
-        <span class="model-brief"><%= get_model_name(@model) %></span>
+        <span class="model-brief">{get_model_name(@model)}</span>
         <span class="toggle-icon collapsed" id={@toggle_id}></span>
       </div>
       <div class="middleware-model-content" id={@model_id} style="display: none;">
@@ -1060,8 +1067,11 @@ defmodule SagentsLiveDebugger.AgentListLive do
   defp middleware_config_entry(assigns) do
     ~H"""
     <div class="config-entry">
-      <div class="config-label"><%= format_config_key(@key) %></div>
-      <pre class={"config-value #{if is_binary(@value), do: "config-value-text", else: ""}"} phx-no-format><%= format_config_value(@value) %></pre>
+      <div class="config-label">{format_config_key(@key)}</div>
+      <pre
+        class={"config-value #{if is_binary(@value), do: "config-value-text", else: ""}"}
+        phx-no-format
+      ><%= format_config_value(@value) %></pre>
     </div>
     """
   end
@@ -1069,6 +1079,7 @@ defmodule SagentsLiveDebugger.AgentListLive do
   defp get_model_name(model) when is_map(model) do
     Map.get(model, :model) || Map.get(model, :__struct__) |> format_module_name()
   end
+
   defp get_model_name(_), do: "Unknown"
 
   defp format_config_key(key) when is_atom(key), do: Atom.to_string(key)
@@ -1080,7 +1091,7 @@ defmodule SagentsLiveDebugger.AgentListLive do
   defp tools_section(assigns) do
     ~H"""
     <div class="info-section">
-      <h3>🛠️ Tools (<%= length(@agent.tools) %>)</h3>
+      <h3>🛠️ Tools ({length(@agent.tools)})</h3>
       <%= if Enum.empty?(@agent.tools) do %>
         <p class="empty-state">No tools available</p>
       <% else %>
@@ -1112,7 +1123,7 @@ defmodule SagentsLiveDebugger.AgentListLive do
         }
       >
         <span class="list-item-name">
-          <%= @tool.name %>
+          {@tool.name}
           <%= if @tool.async do %>
             <span class="badge badge-async">Async</span>
           <% end %>
@@ -1141,12 +1152,12 @@ defmodule SagentsLiveDebugger.AgentListLive do
         <%= if @agent.model do %>
           <div class="info-row">
             <span class="info-label">Model:</span>
-            <span class="info-value"><%= @agent.model.model %></span>
+            <span class="info-value">{@agent.model.model}</span>
           </div>
           <%= if @agent.model.temperature do %>
             <div class="info-row">
               <span class="info-label">Temperature:</span>
-              <span class="info-value"><%= @agent.model.temperature %></span>
+              <span class="info-value">{@agent.model.temperature}</span>
             </div>
           <% end %>
         <% else %>
@@ -1192,8 +1203,8 @@ defmodule SagentsLiveDebugger.AgentListLive do
           </div>
         </div>
       <% end %>
-
-      <!-- Base System Prompt -->
+      
+    <!-- Base System Prompt -->
       <%= if @agent.base_system_prompt && @agent.base_system_prompt != "" do %>
         <div class="system-message-section">
           <div class="system-message-card base-prompt">
@@ -1239,7 +1250,7 @@ defmodule SagentsLiveDebugger.AgentListLive do
         <% end %>
 
         <div class="messages-header">
-          <h3>💬 Conversation Messages (<%= length(@state.messages) %>)</h3>
+          <h3>💬 Conversation Messages ({length(@state.messages)})</h3>
         </div>
 
         <%= if Enum.empty?(@state.messages) do %>
@@ -1292,7 +1303,7 @@ defmodule SagentsLiveDebugger.AgentListLive do
     ~H"""
     <div class="events-tab">
       <div class="events-header">
-        <h3>📡 Event Stream (<%= @event_count %>)</h3>
+        <h3>📡 Event Stream ({@event_count})</h3>
         <p class="events-subtitle">Real-time agent events (last 100)</p>
       </div>
 
@@ -1329,19 +1340,19 @@ defmodule SagentsLiveDebugger.AgentListLive do
       >
         <div class="event-item-main">
           <span class={"event-badge event-badge-#{@event_data.category}"}>
-            <%= if @event_data.category == :debug, do: "Dbg", else: "Std" %>
+            {if @event_data.category == :debug, do: "Dbg", else: "Std"}
           </span>
-          <span class="event-summary"><%= @event_data.event.summary %></span>
+          <span class="event-summary">{@event_data.event.summary}</span>
           <%= if Map.has_key?(@event_data.event, :input) do %>
             <span class="event-field-inline">
-              <span class="token-input">↑<%= @event_data.event.input %></span>
-              <span class="token-output">↓<%= @event_data.event.output %></span>
+              <span class="token-input">↑{@event_data.event.input}</span>
+              <span class="token-output">↓{@event_data.event.output}</span>
             </span>
           <% end %>
         </div>
         <div class="event-item-meta">
           <span class="event-timestamp">
-            <%= format_timestamp(@event_data.timestamp, @user_timezone) %>
+            {format_timestamp(@event_data.timestamp, @user_timezone)}
           </span>
           <span class="toggle-icon collapsed" id={@toggle_id}></span>
         </div>
@@ -1352,32 +1363,32 @@ defmodule SagentsLiveDebugger.AgentListLive do
           <%= if @event_data.event.type == "middleware_action" do %>
             <div class="event-field">
               <span class="event-label">Middleware:</span>
-              <span class="event-value"><%= @event_data.event.middleware %></span>
+              <span class="event-value">{@event_data.event.middleware}</span>
             </div>
             <div class="event-field">
               <span class="event-label">Action:</span>
-              <span class="event-value"><%= @event_data.event.action %></span>
+              <span class="event-value">{@event_data.event.action}</span>
             </div>
           <% end %>
 
           <%= if Map.has_key?(@event_data.event, :status) do %>
             <div class="event-field">
               <span class="event-label">Status:</span>
-              <span class="event-value"><%= @event_data.event.status %></span>
+              <span class="event-value">{@event_data.event.status}</span>
             </div>
           <% end %>
 
           <%= if Map.has_key?(@event_data.event, :content_preview) do %>
             <div class="event-field">
               <span class="event-label">Content Preview:</span>
-              <span class="event-value"><%= @event_data.event.content_preview %></span>
+              <span class="event-value">{@event_data.event.content_preview}</span>
             </div>
           <% end %>
 
           <%= if Map.has_key?(@event_data.event, :count) do %>
             <div class="event-field">
               <span class="event-label">Count:</span>
-              <span class="event-value"><%= @event_data.event.count %></span>
+              <span class="event-value">{@event_data.event.count}</span>
             </div>
           <% end %>
 
@@ -1419,7 +1430,7 @@ defmodule SagentsLiveDebugger.AgentListLive do
     <div class="todos-tab">
       <%= if @state && @state.todos do %>
         <div class="todos-header">
-          <h3>📋 Current TODOs (<%= length(@state.todos) %>)</h3>
+          <h3>📋 Current TODOs ({length(@state.todos)})</h3>
         </div>
 
         <%= if Enum.empty?(@state.todos) do %>
@@ -1447,22 +1458,22 @@ defmodule SagentsLiveDebugger.AgentListLive do
     <div class={"todo-item todo-status-#{@todo.status}"}>
       <div class="todo-header">
         <div class="todo-header-left">
-          <span class="todo-number">#<%= @index %></span>
-          <span class="todo-icon"><%= todo_status_icon(@todo.status) %></span>
+          <span class="todo-number">#{@index}</span>
+          <span class="todo-icon">{todo_status_icon(@todo.status)}</span>
         </div>
         <span class={"todo-badge status-#{@todo.status}"}>
-          <%= format_status(@todo.status) %>
+          {format_status(@todo.status)}
         </span>
       </div>
 
       <div class="todo-content">
-        <%= @todo.content %>
+        {@todo.content}
       </div>
 
       <%= if Map.get(@todo, :active_form) && @todo.active_form do %>
         <div class="todo-active-form">
           <span class="active-form-label">Currently:</span>
-          <em><%= @todo.active_form %></em>
+          <em>{@todo.active_form}</em>
         </div>
       <% end %>
     </div>
@@ -1490,18 +1501,18 @@ defmodule SagentsLiveDebugger.AgentListLive do
     <div class={"message-item message-#{@message.role}"}>
       <div class="message-header">
         <span class="message-role">
-          <%= message_role_emoji(@message.role) %>
-          <%= String.capitalize(to_string(@message.role)) %>
+          {message_role_emoji(@message.role)}
+          {String.capitalize(to_string(@message.role))}
         </span>
         <%= if Map.get(@message, :status) do %>
           <span class={"message-status status-#{Map.get(@message, :status)}"}>
-            <%= Map.get(@message, :status) %>
+            {Map.get(@message, :status)}
           </span>
         <% end %>
       </div>
 
       <div class="message-content">
-        <%= render_message_content(@message) %>
+        {render_message_content(@message)}
       </div>
 
       <%= if @message.tool_calls && @message.tool_calls != [] do %>
@@ -1536,12 +1547,14 @@ defmodule SagentsLiveDebugger.AgentListLive do
     cond do
       is_binary(message.content) ->
         assigns = %{content: message.content}
+
         ~H"""
         <div class="formatted-content" phx-no-format><%= @content %></div>
         """
 
       is_list(message.content) ->
         assigns = %{content: message.content}
+
         ~H"""
         <div class="multimodal-content">
           <.content_part :for={part <- @content} part={part} />
@@ -1550,6 +1563,7 @@ defmodule SagentsLiveDebugger.AgentListLive do
 
       true ->
         assigns = %{content: inspect(message.content, limit: :infinity)}
+
         ~H"""
         <div class="formatted-content" phx-no-format><%= @content %></div>
         """
@@ -1562,6 +1576,7 @@ defmodule SagentsLiveDebugger.AgentListLive do
     cond do
       is_map(part) && Map.get(part, :type) == :text ->
         assigns = %{text: Map.get(part, :content, "")}
+
         ~H"""
         <div class="formatted-content content-part-text" phx-no-format><%= @text %></div>
         """
@@ -1569,11 +1584,13 @@ defmodule SagentsLiveDebugger.AgentListLive do
       is_map(part) && Map.get(part, :type) == :thinking ->
         # Generate unique ID for this thinking block
         thinking_id = "thinking-#{:erlang.phash2(part)}"
+
         assigns = %{
           content: Map.get(part, :content, ""),
           thinking_id: thinking_id,
           toggle_id: "toggle-#{thinking_id}"
         }
+
         ~H"""
         <div class="content-part-thinking">
           <div
@@ -1594,6 +1611,7 @@ defmodule SagentsLiveDebugger.AgentListLive do
 
       is_map(part) && Map.get(part, :type) == :image ->
         assigns = %{part: part}
+
         ~H"""
         <div class="content-part-image" phx-no-format>
           [Image: <%= inspect(@part, limit: :infinity) %>]
@@ -1602,6 +1620,7 @@ defmodule SagentsLiveDebugger.AgentListLive do
 
       true ->
         assigns = %{part: part}
+
         ~H"""
         <div class="content-part-unknown" phx-no-format><%= inspect(@part, limit: :infinity) %></div>
         """
@@ -1612,9 +1631,9 @@ defmodule SagentsLiveDebugger.AgentListLive do
     ~H"""
     <div class="tool-call">
       <div class="tool-call-header">
-        <span class="tool-name">🔧 <%= @tool_call.name %></span>
+        <span class="tool-name">🔧 {@tool_call.name}</span>
         <%= if @tool_call.call_id do %>
-          <span class="tool-call-id"><%= @tool_call.call_id %></span>
+          <span class="tool-call-id">{@tool_call.call_id}</span>
         <% end %>
       </div>
       <%= if @tool_call.arguments do %>
@@ -1631,13 +1650,13 @@ defmodule SagentsLiveDebugger.AgentListLive do
     ~H"""
     <div class="tool-result">
       <div class="tool-result-header">
-        <span class="tool-name">✅ <%= @tool_result.name || "Result" %></span>
+        <span class="tool-name">✅ {@tool_result.name || "Result"}</span>
         <%= if @tool_result.tool_call_id do %>
-          <span class="tool-call-id"><%= @tool_result.tool_call_id %></span>
+          <span class="tool-call-id">{@tool_result.tool_call_id}</span>
         <% end %>
         <%= if Map.get(@tool_result, :status) do %>
           <span class={"result-status status-#{Map.get(@tool_result, :status)}"}>
-            <%= Map.get(@tool_result, :status) %>
+            {Map.get(@tool_result, :status)}
           </span>
         <% end %>
       </div>
@@ -1656,6 +1675,7 @@ defmodule SagentsLiveDebugger.AgentListLive do
   defp detail_status_description(_), do: "Unknown"
 
   defp detail_format_time_ago(nil), do: "Never"
+
   defp detail_format_time_ago(datetime) do
     now = DateTime.utc_now()
     diff_seconds = DateTime.diff(now, datetime, :second)
@@ -1863,6 +1883,7 @@ defmodule SagentsLiveDebugger.AgentListLive do
         deltas = List.flatten([deltas])
         delta_count = length(deltas)
         merged_delta = LangChain.MessageDelta.merge_deltas(nil, deltas)
+
         %{
           type: "llm_deltas",
           merged_delta: merged_delta,
@@ -2004,7 +2025,11 @@ defmodule SagentsLiveDebugger.AgentListLive do
           # Check if the latest event is also a delta event with an accumulated delta
           case existing_events do
             # When the latest event is a streaming delta, update and merge new events in
-            [%{event: %{type: "llm_deltas", merged_delta: prev_merged, delta_count: prev_count}} = last_event | rest]
+            [
+              %{event: %{type: "llm_deltas", merged_delta: prev_merged, delta_count: prev_count}} =
+                last_event
+              | rest
+            ]
             when not is_nil(prev_merged) ->
               # Use merge_deltas/2: pass accumulated delta + new batch
               merged_delta = LangChain.MessageDelta.merge_deltas(prev_merged, deltas)
@@ -2013,7 +2038,12 @@ defmodule SagentsLiveDebugger.AgentListLive do
               # Update the existing delta event
               updated_event = %{
                 last_event
-                | event: %{last_event.event | merged_delta: merged_delta, delta_count: new_count, summary: "Streaming: #{new_count} deltas"},
+                | event: %{
+                    last_event.event
+                    | merged_delta: merged_delta,
+                      delta_count: new_count,
+                      summary: "Streaming: #{new_count} deltas"
+                  },
                   timestamp: DateTime.utc_now()
               }
 
