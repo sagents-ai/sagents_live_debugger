@@ -5,6 +5,7 @@ defmodule SagentsLiveDebugger.AgentListLive do
   import SagentsLiveDebugger.CoreComponents
   import SagentsLiveDebugger.Live.Components.SubagentsTab
   import SagentsLiveDebugger.Live.Components.MessageComponents
+  import SagentsLiveDebugger.Live.Components.FilterConfig
   alias SagentsLiveDebugger.{Metrics, FilterForm}
 
   # Presence topics for debugger discovery
@@ -74,10 +75,9 @@ defmodule SagentsLiveDebugger.AgentListLive do
       FilterForm.new()
       |> FilterForm.changeset(%{})
 
-    # Auto-follow configuration - enabled by default in dev
-    env = Application.get_env(:sagents_live_debugger, :env, :dev)
-    auto_follow_default = env == :dev
-    debug_filters = if env == :dev, do: :all, else: :none
+    # Auto-follow configuration - can be customized in consuming app's config
+    # Defaults are dev-friendly: auto-follow enabled
+    auto_follow_default = Application.get_env(:sagents_live_debugger, :auto_follow_default, true)
 
     socket =
       socket
@@ -97,15 +97,15 @@ defmodule SagentsLiveDebugger.AgentListLive do
       |> assign(:subscribed_agent_id, nil)
       # Auto-follow state
       |> assign(:auto_follow_first, auto_follow_default)
+      |> assign(:auto_follow_filters, :none)
       |> assign(:followed_agent_id, nil)
-      |> assign(:debug_filters, debug_filters)
       # Sub-agents state (for Phase 4)
       |> assign(:subagents, %{})
       |> assign(:expanded_subagent, nil)
       |> assign(:subagent_tab, "config")
 
     # Auto-follow first existing agent if auto-follow is enabled
-    socket = maybe_auto_follow_existing_agent(socket, agents, auto_follow_default, debug_filters)
+    socket = maybe_auto_follow_existing_agent(socket, agents, auto_follow_default)
 
     {:ok, socket}
   end
@@ -257,7 +257,11 @@ defmodule SagentsLiveDebugger.AgentListLive do
   # Handle presence_diff events for agent presence topic (agent discovery)
   # This is the primary mechanism for updating the agent list - no polling needed
   def handle_info(
-        %Phoenix.Socket.Broadcast{event: "presence_diff", topic: @agent_presence_topic, payload: payload},
+        %Phoenix.Socket.Broadcast{
+          event: "presence_diff",
+          topic: @agent_presence_topic,
+          payload: payload
+        },
         socket
       ) do
     joins = Map.get(payload, :joins, %{})
@@ -266,10 +270,13 @@ defmodule SagentsLiveDebugger.AgentListLive do
     if map_size(joins) > 0 || map_size(leaves) > 0 do
       # Categorize presence changes into joined/left/updated
       # Updates (metadata changes) don't affect follow state - only true joins/leaves do
-      %{joined: joined, left: left, updated: _updated} = categorize_presence_changes(joins, leaves)
+      %{joined: joined, left: left, updated: _updated} =
+        categorize_presence_changes(joins, leaves)
 
       # Rebuild agent list from current presence state (includes all changes)
-      agents = build_agents_from_presence(socket.assigns.presence_module, socket.assigns.coordinator)
+      agents =
+        build_agents_from_presence(socket.assigns.presence_module, socket.assigns.coordinator)
+
       metrics = Metrics.calculate_metrics(agents)
 
       # Subscribe to any new conversation agents (for viewer counts)
@@ -293,6 +300,7 @@ defmodule SagentsLiveDebugger.AgentListLive do
         |> assign(:subscribed_topics, subscribed_topics)
         |> handle_agents_joined(joined)
         |> handle_agents_left(left)
+
       # Note: updates don't need handling - agent list is rebuilt, follow state unchanged
 
       {:noreply, socket}
@@ -539,6 +547,23 @@ defmodule SagentsLiveDebugger.AgentListLive do
     {:noreply, maybe_unfollow_agent(socket)}
   end
 
+  # Apply auto-follow filters from the filter form
+  def handle_event("apply_debug_filters", %{"filters" => filter_params}, socket) do
+    filters = SagentsLiveDebugger.Live.Components.FilterConfig.parse_filters(filter_params)
+    {:noreply, assign(socket, :auto_follow_filters, filters)}
+  end
+
+  # Preview filters as user types (same as apply for now)
+  def handle_event("preview_debug_filters", %{"filters" => filter_params}, socket) do
+    filters = SagentsLiveDebugger.Live.Components.FilterConfig.parse_filters(filter_params)
+    {:noreply, assign(socket, :auto_follow_filters, filters)}
+  end
+
+  # Clear all auto-follow filters
+  def handle_event("clear_debug_filters", _params, socket) do
+    {:noreply, assign(socket, :auto_follow_filters, :none)}
+  end
+
   ## Presence-Based Agent List Functions
   #
   # These functions build the agent list entirely from presence metadata,
@@ -558,7 +583,8 @@ defmodule SagentsLiveDebugger.AgentListLive do
         conversation_id: Map.get(meta, :conversation_id),
         last_activity: Map.get(meta, :last_activity_at),
         started_at: Map.get(meta, :started_at),
-        viewer_count: get_viewer_count_from_presence(coordinator, Map.get(meta, :conversation_id)),
+        viewer_count:
+          get_viewer_count_from_presence(coordinator, Map.get(meta, :conversation_id)),
         node: Map.get(meta, :node)
       }
     end)
@@ -581,44 +607,50 @@ defmodule SagentsLiveDebugger.AgentListLive do
   # Auto-follow automatically subscribes to the first matching agent that appears.
   # This eliminates the need for event buffering - the debugger captures all events
   # from the moment of auto-follow.
+  #
+  # Filters only affect which agent gets auto-followed - all agents remain visible
+  # in the list regardless of filter settings.
 
-  # Auto-follow first existing agent on mount (if any exist and auto-follow is enabled)
-  defp maybe_auto_follow_existing_agent(socket, agents, auto_follow_enabled, debug_filters) do
+  # Auto-follow first matching agent on mount (if any exist and auto-follow is enabled)
+  defp maybe_auto_follow_existing_agent(socket, agents, auto_follow_enabled) do
     if auto_follow_enabled && connected?(socket) && length(agents) > 0 do
-      case find_first_matching_existing_agent(agents, debug_filters) do
+      filters = socket.assigns[:auto_follow_filters] || :none
+
+      case find_first_matching_agent(agents, filters) do
         nil -> socket
-        agent_id -> follow_agent(socket, agent_id)
+        agent -> follow_agent(socket, agent.agent_id)
       end
     else
       socket
     end
   end
 
-  # Find first agent matching the debug filters from agent list
-  defp find_first_matching_existing_agent(agents, :all) do
-    case agents do
-      [first | _] -> first.agent_id
-      [] -> nil
-    end
+  # Find first agent that matches the auto-follow filters
+  defp find_first_matching_agent(agents, :none), do: List.first(agents)
+  defp find_first_matching_agent(agents, :all), do: List.first(agents)
+
+  defp find_first_matching_agent(agents, filters) when is_list(filters) do
+    Enum.find(agents, fn agent -> agent_matches_filters?(agent, filters) end)
   end
 
-  defp find_first_matching_existing_agent(_agents, :none), do: nil
-
-  defp find_first_matching_existing_agent(agents, filters) when is_list(filters) do
-    Enum.find_value(agents, fn agent ->
-      if matches_any_agent_filter?(agent, filters), do: agent.agent_id
-    end)
+  # Check if an agent matches all the specified filters
+  defp agent_matches_filters?(agent, filters) do
+    Enum.all?(filters, fn filter -> agent_matches_filter?(agent, filter) end)
   end
 
-  defp matches_any_agent_filter?(agent, filters) do
-    Enum.any?(filters, fn
-      {:conversation_id, id} -> agent.conversation_id == id
-      {:agent_id, id} -> agent.agent_id == id
-      # Generic filter matching for custom fields (e.g., project_id, user_id)
-      # These come from presence metadata and may vary by integration
-      {key, id} when is_atom(key) -> Map.get(agent, key) == id
-      _ -> false
-    end)
+  defp agent_matches_filter?(agent, {:conversation_id, value}) do
+    to_string(agent.conversation_id) == to_string(value)
+  end
+
+  defp agent_matches_filter?(agent, {:agent_id, value}) do
+    to_string(agent.agent_id) == to_string(value)
+  end
+
+  defp agent_matches_filter?(_agent, {_key, _value}) do
+    # For custom scope fields, we'd need to check presence metadata
+    # For now, only conversation_id and agent_id are directly available
+    # Custom fields would require fetching full presence metadata
+    false
   end
 
   ## Presence Change Categorization
@@ -678,14 +710,25 @@ defmodule SagentsLiveDebugger.AgentListLive do
   defp has_phx_ref_prev?(_), do: false
 
   # Handle agents that truly joined (not updates)
-  # This is where auto-follow logic lives
+  # This is where auto-follow logic lives - filters control which agent gets followed
   defp handle_agents_joined(socket, joined) when map_size(joined) == 0, do: socket
 
   defp handle_agents_joined(socket, joined) do
     if socket.assigns.auto_follow_first and is_nil(socket.assigns.followed_agent_id) do
-      case find_first_matching_agent(joined, socket.assigns.debug_filters) do
+      filters = socket.assigns[:auto_follow_filters] || :none
+
+      # Convert joined map to list of agent-like maps for filter matching
+      joined_agents =
+        Enum.map(joined, fn {agent_id, %{metas: [meta | _]}} ->
+          %{
+            agent_id: agent_id,
+            conversation_id: Map.get(meta, :conversation_id)
+          }
+        end)
+
+      case find_first_matching_agent(joined_agents, filters) do
         nil -> socket
-        agent_id -> follow_agent(socket, agent_id)
+        agent -> follow_agent(socket, agent.agent_id)
       end
     else
       socket
@@ -705,33 +748,6 @@ defmodule SagentsLiveDebugger.AgentListLive do
     else
       socket
     end
-  end
-
-  # Find first agent matching the debug filters
-  defp find_first_matching_agent(joins, :all) do
-    case Map.keys(joins) do
-      [first | _] -> first
-      [] -> nil
-    end
-  end
-
-  defp find_first_matching_agent(_joins, :none), do: nil
-
-  defp find_first_matching_agent(joins, filters) when is_list(filters) do
-    Enum.find_value(joins, fn {agent_id, %{metas: [meta | _]}} ->
-      if matches_any_filter?(meta, filters), do: agent_id
-    end)
-  end
-
-  defp matches_any_filter?(meta, filters) do
-    Enum.any?(filters, fn
-      {:conversation_id, id} -> Map.get(meta, :conversation_id) == id
-      {:agent_id, id} -> Map.get(meta, :agent_id) == id
-      # Generic filter matching for custom fields from presence metadata
-      # (e.g., project_id, user_id - varies by integration)
-      {key, id} when is_atom(key) -> Map.get(meta, key) == id
-      _ -> false
-    end)
   end
 
   ## Follow/Unfollow Agent Functions
@@ -1085,7 +1101,13 @@ defmodule SagentsLiveDebugger.AgentListLive do
     <!-- System Overview Panel -->
       <.system_overview metrics={@metrics} />
 
-    <!-- Filters -->
+    <!-- Auto-Follow Filter Configuration -->
+      <.filter_config_form
+        filters={@auto_follow_filters}
+        presence_active={@followed_agent_id != nil}
+      />
+
+    <!-- Agent List Filters (for visibility/sorting) -->
       <.filter_controls form={@form} />
 
     <!-- Active Agent List -->
