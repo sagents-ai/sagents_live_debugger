@@ -202,24 +202,18 @@ defmodule SagentsLiveDebugger.AgentListLive do
     # - Switching tabs or reloading the same agent detail view
     # - Entering detail view for an agent we've been following (preserve buffered events)
     followed_id = socket.assigns[:followed_agent_id]
-    event_count = length(socket.assigns[:event_stream] || [])
-
-    Logger.debug("[ClearEvents] previous=#{inspect(previous_agent_id)}, current=#{inspect(current_agent_id)}, followed=#{inspect(followed_id)}, event_count=#{event_count}")
 
     cond do
       # Same agent - keep events (tab switch)
       previous_agent_id == current_agent_id ->
-        Logger.debug("[ClearEvents] Keeping events - same agent (tab switch)")
         socket
 
       # Entering detail view for followed agent - keep buffered events
       current_agent_id == followed_id ->
-        Logger.debug("[ClearEvents] Keeping events - entering detail for followed agent")
         socket
 
       # Switching to a different agent - clear events
       true ->
-        Logger.debug("[ClearEvents] Clearing events - switching to different agent")
         assign(socket, :event_stream, [])
     end
   end
@@ -269,12 +263,7 @@ defmodule SagentsLiveDebugger.AgentListLive do
     if map_size(joins) > 0 || map_size(leaves) > 0 do
       # Categorize presence changes into joined/left/updated
       # Updates (metadata changes) don't affect follow state - only true joins/leaves do
-      %{joined: joined, left: left, updated: updated} = categorize_presence_changes(joins, leaves)
-
-      # Log for debugging
-      for {agent_id, _} <- joined, do: Logger.debug("[Presence] #{agent_id} JOINED")
-      for {agent_id, _} <- left, do: Logger.debug("[Presence] #{agent_id} LEFT")
-      for {agent_id, _} <- updated, do: Logger.debug("[Presence] #{agent_id} UPDATED (metadata change)")
+      %{joined: joined, left: left, updated: _updated} = categorize_presence_changes(joins, leaves)
 
       # Rebuild agent list from current presence state (includes all changes)
       agents = build_agents_from_presence(socket.assigns.presence_module, socket.assigns.coordinator)
@@ -342,10 +331,7 @@ defmodule SagentsLiveDebugger.AgentListLive do
   end
 
   # Handle agent shutdown events
-  def handle_info({:agent, {:agent_shutdown, shutdown_data}}, socket) do
-    # Log the shutdown for debugging
-    Logger.debug("Agent #{shutdown_data.agent_id} shutting down: #{shutdown_data.reason}")
-
+  def handle_info({:agent, {:agent_shutdown, _shutdown_data}}, socket) do
     # The periodic refresh will remove the agent from the list
     # No need to manually update the agent list here
     {:noreply, socket}
@@ -374,11 +360,8 @@ defmodule SagentsLiveDebugger.AgentListLive do
 
   # Handle llm_message events
   def handle_info({:agent, {:llm_message, message}}, socket) do
-    Logger.debug("[Event] llm_message received, followed_agent_id=#{inspect(socket.assigns.followed_agent_id)}, view_mode=#{socket.assigns.view_mode}, event_stream_size=#{length(socket.assigns[:event_stream] || [])}")
-
     socket =
       if socket.assigns.followed_agent_id != nil do
-        Logger.debug("[Event] Adding llm_message to event stream")
         # Update agent state if in detail view with state loaded
         socket =
           if socket.assigns.view_mode == :detail && socket.assigns.agent_state do
@@ -391,7 +374,6 @@ defmodule SagentsLiveDebugger.AgentListLive do
 
         add_event_to_stream(socket, {:llm_message, message}, :std)
       else
-        Logger.debug("[Event] Ignoring llm_message - no followed_agent_id")
         socket
       end
 
@@ -538,9 +520,8 @@ defmodule SagentsLiveDebugger.AgentListLive do
   defp build_agents_from_presence(nil, _coordinator), do: []
 
   defp build_agents_from_presence(presence_module, coordinator) do
-    presences = LangChain.Presence.list(presence_module, @agent_presence_topic)
-
-    presences
+    presence_module
+    |> LangChain.Presence.list(@agent_presence_topic)
     |> Enum.map(fn {agent_id, %{metas: [meta | _]}} ->
       %{
         agent_id: agent_id,
@@ -575,17 +556,9 @@ defmodule SagentsLiveDebugger.AgentListLive do
   # Auto-follow first existing agent on mount (if any exist and auto-follow is enabled)
   defp maybe_auto_follow_existing_agent(socket, agents, auto_follow_enabled, debug_filters) do
     if auto_follow_enabled && connected?(socket) && length(agents) > 0 do
-      Logger.debug("[AutoFollow] Checking existing agents on mount: #{length(agents)} agents")
-
-      # Find first matching agent from the existing agent list
       case find_first_matching_existing_agent(agents, debug_filters) do
-        nil ->
-          Logger.debug("[AutoFollow] No matching existing agent found")
-          socket
-
-        agent_id ->
-          Logger.debug("[AutoFollow] Auto-following existing agent on mount: #{agent_id}")
-          follow_agent(socket, agent_id)
+        nil -> socket
+        agent_id -> follow_agent(socket, agent_id)
       end
     else
       socket
@@ -682,12 +655,8 @@ defmodule SagentsLiveDebugger.AgentListLive do
   defp handle_agents_joined(socket, joined) do
     if socket.assigns.auto_follow_first and is_nil(socket.assigns.followed_agent_id) do
       case find_first_matching_agent(joined, socket.assigns.debug_filters) do
-        nil ->
-          socket
-
-        agent_id ->
-          Logger.debug("[AutoFollow] Auto-following new agent: #{agent_id}")
-          follow_agent(socket, agent_id)
+        nil -> socket
+        agent_id -> follow_agent(socket, agent_id)
       end
     else
       socket
@@ -700,7 +669,6 @@ defmodule SagentsLiveDebugger.AgentListLive do
     followed = socket.assigns.followed_agent_id
 
     if followed && Map.has_key?(left, followed) do
-      Logger.debug("[Presence] Followed agent #{followed} LEFT - clearing follow state")
       socket
       |> assign(:followed_agent_id, nil)
       |> assign(:event_stream, [])
@@ -742,7 +710,6 @@ defmodule SagentsLiveDebugger.AgentListLive do
   defp follow_agent(socket, agent_id) do
     # Don't re-follow if already following the same agent (preserves event_stream)
     if socket.assigns.followed_agent_id == agent_id do
-      Logger.debug("[Follow] Already following #{agent_id}, skipping re-follow (preserving #{length(socket.assigns[:event_stream] || [])} events)")
       socket
     else
       do_follow_agent(socket, agent_id)
@@ -750,28 +717,19 @@ defmodule SagentsLiveDebugger.AgentListLive do
   end
 
   defp do_follow_agent(socket, agent_id) do
-    Logger.debug("[Follow] Starting follow for agent: #{agent_id}")
-
     # Unfollow previous if any
     socket = maybe_unfollow_agent(socket)
 
     # Subscribe to agent events
     socket =
       if connected?(socket) do
-        sub_result = LangChain.Agents.AgentServer.subscribe(agent_id)
-        debug_sub_result = LangChain.Agents.AgentServer.subscribe_debug(agent_id)
-        Logger.debug("[Follow] Subscription results - standard: #{inspect(sub_result)}, debug: #{inspect(debug_sub_result)}")
-
-        with :ok <- sub_result,
-             :ok <- debug_sub_result do
+        with :ok <- LangChain.Agents.AgentServer.subscribe(agent_id),
+             :ok <- LangChain.Agents.AgentServer.subscribe_debug(agent_id) do
           socket
         else
-          error ->
-            Logger.debug("[Follow] Subscription failed: #{inspect(error)}")
-            socket
+          _error -> socket
         end
       else
-        Logger.debug("[Follow] Not connected, skipping subscriptions")
         socket
       end
 
@@ -905,7 +863,6 @@ defmodule SagentsLiveDebugger.AgentListLive do
            metadata
          ) do
       {:ok, _ref} ->
-        Logger.debug("Debugger #{debugger_id} tracked for discovery")
         :ok
 
       {:error, reason} ->
