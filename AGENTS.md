@@ -1,3 +1,40 @@
+# CRITICAL: Embeddable Library Architecture
+
+This project (`sagents_live_debugger`) is an **embeddable Phoenix LiveView library** - similar to Phoenix LiveDashboard. It gets embedded into other Phoenix applications via their router configuration.
+
+## Key Constraints
+
+### 1. Self-Contained CSS - No Tailwind/DaisyUI
+
+**ALL CSS styles MUST be defined in `lib/sagents_live_debugger/layouts.ex`** as raw CSS within the `css/0` function. This library CANNOT rely on:
+
+- Tailwind CSS utility classes (e.g., `p-4`, `flex`, `text-sm`, `gap-2`)
+- DaisyUI component classes (e.g., `badge`, `tabs`, `loading`, `btn-primary`)
+- Any external CSS framework from the host application
+
+The host application's CSS pipeline is completely separate and inaccessible. When adding new UI elements:
+
+1. Check `layouts.ex` for existing CSS classes
+2. Add new CSS rules to the `css/0` function if needed
+3. Use only class names defined in `layouts.ex`
+
+### 2. Self-Contained JavaScript
+
+JavaScript must also be self-contained and cannot rely on the host application's asset pipeline. Any JS hooks or interactivity must be defined within this library's layout.
+
+### 3. Router Integration
+
+The library is mounted into host applications like:
+
+```elixir
+# In host app's router
+sagents_live_debugger "/debug/agents",
+  coordinator: AgentsDemo.Agents.Coordinator,
+  presence_module: AgentsDemoWeb.Presence
+```
+
+---
+
 ## Project guidelines
 
 - Use `mix precommit` alias when you are done with all changes and fix any pending issues

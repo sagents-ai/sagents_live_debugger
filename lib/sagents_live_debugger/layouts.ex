@@ -1453,6 +1453,283 @@ defmodule SagentsLiveDebugger.Layouts do
       display: flex;
       gap: 0.5rem;
     }
+
+    /* Sub-Agents Tab Styles */
+    .subagents-container {
+      padding: 1rem;
+    }
+
+    .subagents-list {
+      display: flex;
+      flex-direction: column;
+      gap: 0.75rem;
+    }
+
+    .subagent-entry {
+      border: 1px solid #e5e7eb;
+      border-radius: 0.5rem;
+      background: #f9fafb;
+      overflow: hidden;
+    }
+
+    /* Status-based left border colors */
+    .subagent-entry.status-starting {
+      border-left: 4px solid #f59e0b;
+    }
+
+    .subagent-entry.status-running {
+      border-left: 4px solid #3b82f6;
+    }
+
+    .subagent-entry.status-completed {
+      border-left: 4px solid #10b981;
+    }
+
+    .subagent-entry.status-interrupted {
+      border-left: 4px solid #f59e0b;
+    }
+
+    .subagent-entry.status-error {
+      border-left: 4px solid #ef4444;
+    }
+
+    .subagent-header {
+      display: flex;
+      align-items: center;
+      gap: 0.75rem;
+      padding: 0.75rem 1rem;
+      cursor: pointer;
+      transition: background 0.15s;
+    }
+
+    .subagent-header:hover {
+      background: #f3f4f6;
+    }
+
+    .subagent-expand-icon {
+      font-size: 0.75rem;
+      color: #6b7280;
+      width: 1rem;
+      flex-shrink: 0;
+    }
+
+    .subagent-name {
+      font-weight: 500;
+      color: #1f2937;
+      flex: 1;
+    }
+
+    /* Sub-agent status badges */
+    .subagent-status-badge {
+      display: inline-block;
+      padding: 0.125rem 0.5rem;
+      border-radius: 0.25rem;
+      font-size: 0.75rem;
+      font-weight: 600;
+    }
+
+    .subagent-status-badge.status-starting {
+      background: #fef3c7;
+      color: #92400e;
+    }
+
+    .subagent-status-badge.status-running {
+      background: #dbeafe;
+      color: #1e40af;
+    }
+
+    .subagent-status-badge.status-completed {
+      background: #d1fae5;
+      color: #065f46;
+    }
+
+    .subagent-status-badge.status-interrupted {
+      background: #fef3c7;
+      color: #92400e;
+    }
+
+    .subagent-status-badge.status-error {
+      background: #fee2e2;
+      color: #991b1b;
+    }
+
+    /* Token usage badge */
+    .subagent-token-badge {
+      display: inline-block;
+      padding: 0.125rem 0.5rem;
+      border-radius: 0.25rem;
+      font-size: 0.75rem;
+      background: #f3f4f6;
+      color: #374151;
+      border: 1px solid #d1d5db;
+    }
+
+    .subagent-duration {
+      font-size: 0.875rem;
+      color: #6b7280;
+    }
+
+    .subagent-message-count {
+      font-size: 0.875rem;
+      color: #6b7280;
+    }
+
+    /* Sub-agent detail view */
+    .subagent-detail {
+      border-top: 1px solid #e5e7eb;
+      padding: 1rem;
+      background: white;
+    }
+
+    /* Sub-agent tabs */
+    .subagent-tabs {
+      display: flex;
+      gap: 0.5rem;
+      margin-bottom: 1rem;
+      border-bottom: 2px solid #e5e7eb;
+    }
+
+    .subagent-tab {
+      padding: 0.5rem 1rem;
+      background: none;
+      border: none;
+      border-bottom: 2px solid transparent;
+      margin-bottom: -2px;
+      cursor: pointer;
+      font-weight: 500;
+      color: #6b7280;
+      font-size: 0.875rem;
+      transition: all 0.2s;
+    }
+
+    .subagent-tab:hover {
+      color: #1f2937;
+    }
+
+    .subagent-tab.active {
+      color: #6366f1;
+      border-bottom-color: #6366f1;
+    }
+
+    /* Sub-agent config view */
+    .subagent-config-view {
+      display: flex;
+      flex-direction: column;
+      gap: 1rem;
+    }
+
+    .subagent-config-item label {
+      display: block;
+      font-size: 0.875rem;
+      font-weight: 500;
+      color: #6b7280;
+      margin-bottom: 0.25rem;
+    }
+
+    .subagent-config-item code {
+      display: block;
+      font-size: 0.875rem;
+      background: #f3f4f6;
+      padding: 0.5rem 0.75rem;
+      border-radius: 0.25rem;
+      word-break: break-all;
+      font-family: 'Courier New', monospace;
+    }
+
+    .subagent-config-item span {
+      font-size: 0.875rem;
+    }
+
+    .subagent-config-item pre {
+      margin: 0;
+      font-size: 0.875rem;
+      background: #f3f4f6;
+      padding: 0.75rem;
+      border-radius: 0.25rem;
+      overflow-x: auto;
+      max-height: 12rem;
+      overflow-y: auto;
+      white-space: pre-wrap;
+    }
+
+    .subagent-error-label {
+      color: #dc2626 !important;
+    }
+
+    .subagent-error-content {
+      background: #fef2f2 !important;
+      color: #991b1b;
+    }
+
+    /* Streaming indicator */
+    .subagent-streaming {
+      display: flex;
+      align-items: center;
+      gap: 0.5rem;
+      color: #3b82f6;
+      font-size: 0.875rem;
+      margin-bottom: 0.75rem;
+    }
+
+    .subagent-streaming-dots {
+      display: inline-flex;
+      gap: 2px;
+    }
+
+    .subagent-streaming-dots span {
+      width: 4px;
+      height: 4px;
+      background: #3b82f6;
+      border-radius: 50%;
+      animation: streaming-dot 1.4s infinite ease-in-out;
+    }
+
+    .subagent-streaming-dots span:nth-child(1) {
+      animation-delay: 0s;
+    }
+
+    .subagent-streaming-dots span:nth-child(2) {
+      animation-delay: 0.2s;
+    }
+
+    .subagent-streaming-dots span:nth-child(3) {
+      animation-delay: 0.4s;
+    }
+
+    @keyframes streaming-dot {
+      0%, 80%, 100% {
+        opacity: 0.3;
+        transform: scale(0.8);
+      }
+      40% {
+        opacity: 1;
+        transform: scale(1);
+      }
+    }
+
+    .subagent-streaming-content {
+      font-size: 0.875rem;
+      background: #eff6ff;
+      padding: 0.75rem;
+      border-radius: 0.25rem;
+      white-space: pre-wrap;
+      margin-bottom: 0.75rem;
+    }
+
+    /* Sub-agent messages view */
+    .subagent-messages-view {
+      display: flex;
+      flex-direction: column;
+      gap: 0.75rem;
+    }
+
+    .subagent-messages-empty,
+    .subagent-tools-empty,
+    .subagent-middleware-empty {
+      text-align: center;
+      color: #6b7280;
+      padding: 1rem;
+    }
     """
   end
 end

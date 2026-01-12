@@ -3,6 +3,8 @@ defmodule SagentsLiveDebugger.AgentListLive do
   require Logger
 
   import SagentsLiveDebugger.CoreComponents
+  import SagentsLiveDebugger.Live.Components.SubagentsTab
+  import SagentsLiveDebugger.Live.Components.MessageComponents
   alias SagentsLiveDebugger.{Metrics, FilterForm}
 
   # Presence topics for debugger discovery
@@ -165,6 +167,7 @@ defmodule SagentsLiveDebugger.AgentListLive do
             "tools" -> :tools
             "todos" -> :todos
             "events" -> :events
+            "subagents" -> :subagents
             _ -> :overview
           end
 
@@ -416,6 +419,21 @@ defmodule SagentsLiveDebugger.AgentListLive do
     {:noreply, socket}
   end
 
+  # Handler for sub-agent debug events
+  # Sub-agent events are wrapped as {:agent, {:debug, {:subagent, sub_agent_id, event}}}
+  def handle_info({:agent, {:debug, {:subagent, sub_agent_id, event}}}, socket) do
+    socket =
+      if socket.assigns.followed_agent_id != nil do
+        socket
+        |> handle_subagent_event(sub_agent_id, event)
+        |> add_event_to_stream({:subagent, sub_agent_id, event}, :debug)
+      else
+        socket
+      end
+
+    {:noreply, socket}
+  end
+
   # Handler for wrapped debug events
   # Debug events are wrapped with {:agent, {:debug, event}} tuple in AgentServer
   def handle_info({:agent, {:debug, event}}, socket) do
@@ -498,6 +516,17 @@ defmodule SagentsLiveDebugger.AgentListLive do
   # Toggle auto-follow first agent
   def handle_event("toggle_auto_follow", _params, socket) do
     {:noreply, assign(socket, :auto_follow_first, !socket.assigns.auto_follow_first)}
+  end
+
+  # Toggle subagent expansion in the Sub-Agents tab
+  def handle_event("toggle_subagent", %{"id" => id}, socket) do
+    new_expanded = if socket.assigns.expanded_subagent == id, do: nil, else: id
+    {:noreply, assign(socket, :expanded_subagent, new_expanded)}
+  end
+
+  # Select tab within expanded subagent (config, messages, tools)
+  def handle_event("select_subagent_tab", %{"tab" => tab}, socket) do
+    {:noreply, assign(socket, :subagent_tab, tab)}
   end
 
   # Manually follow an agent from the list
@@ -1124,6 +1153,13 @@ defmodule SagentsLiveDebugger.AgentListLive do
           >
             Events
           </button>
+          <button
+            phx-click="change_tab"
+            phx-value-tab="subagents"
+            class={"tab-button #{if @current_tab == :subagents, do: "active", else: ""}"}
+          >
+            Sub-Agents (<%= map_size(@subagents) %>)
+          </button>
         </div>
 
         <div class="agent-detail-content">
@@ -1146,6 +1182,12 @@ defmodule SagentsLiveDebugger.AgentListLive do
               <.events_tab event_stream={@event_stream} user_timezone={@user_timezone} />
             <% :todos -> %>
               <.todos_tab state={@agent_state} />
+            <% :subagents -> %>
+              <.subagents_view
+                subagents={@subagents}
+                expanded_subagent={@expanded_subagent}
+                subagent_tab={@subagent_tab}
+              />
           <% end %>
         </div>
       <% end %>
@@ -1516,118 +1558,9 @@ defmodule SagentsLiveDebugger.AgentListLive do
     """
   end
 
-  defp middleware_section(assigns) do
-    ~H"""
-    <div class="info-section">
-      <h3>🔧 Middleware ({length(@agent.middleware)})</h3>
-      <%= if Enum.empty?(@agent.middleware) do %>
-        <p class="empty-state">No middleware configured</p>
-      <% else %>
-        <div class="list-card">
-          <%= for entry <- @agent.middleware do %>
-            <.middleware_item entry={entry} />
-          <% end %>
-        </div>
-      <% end %>
-    </div>
-    """
-  end
-
-  defp middleware_item(assigns) do
-    # Filter out agent_id and model from config
-    config_without_special = Map.drop(assigns.entry.config, [:agent_id, :model])
-    model = Map.get(assigns.entry.config, :model)
-
-    # Generate unique IDs for this middleware item
-    middleware_id = "middleware-#{:erlang.phash2(assigns.entry.id)}"
-    toggle_id = "toggle-#{middleware_id}"
-
-    assigns = assign(assigns, :config_without_special, config_without_special)
-    assigns = assign(assigns, :model, model)
-    assigns = assign(assigns, :middleware_id, middleware_id)
-    assigns = assign(assigns, :toggle_id, toggle_id)
-
-    ~H"""
-    <div class="list-item">
-      <div
-        class="list-item-header middleware-header-clickable"
-        phx-click={
-          Phoenix.LiveView.JS.toggle(to: "##{@middleware_id}")
-          |> Phoenix.LiveView.JS.toggle_class("collapsed", to: "##{@toggle_id}")
-        }
-      >
-        <span class="list-item-name">{format_module_name(@entry.id)}</span>
-        <span class="toggle-icon collapsed" id={@toggle_id}></span>
-      </div>
-
-      <div class="middleware-content" id={@middleware_id} style="display: none;">
-        <%= if @model do %>
-          <.middleware_model_config model={@model} entry_id={@entry.id} />
-        <% end %>
-
-        <%= if map_size(@config_without_special) > 0 do %>
-          <div class="middleware-config">
-            <%= for {key, value} <- @config_without_special do %>
-              <.middleware_config_entry key={key} value={value} />
-            <% end %>
-          </div>
-        <% end %>
-      </div>
-    </div>
-    """
-  end
-
-  defp middleware_model_config(assigns) do
-    # Generate unique ID for this model config
-    model_id = "model-#{:erlang.phash2(assigns.entry_id)}"
-    toggle_id = "toggle-#{model_id}"
-
-    assigns = assign(assigns, :model_id, model_id)
-    assigns = assign(assigns, :toggle_id, toggle_id)
-
-    ~H"""
-    <div class="middleware-model">
-      <div
-        class="middleware-model-header"
-        phx-click={
-          Phoenix.LiveView.JS.toggle(to: "##{@model_id}")
-          |> Phoenix.LiveView.JS.toggle_class("collapsed", to: "##{@toggle_id}")
-        }
-      >
-        <span class="config-label">🤖 Model</span>
-        <span class="model-brief">{get_model_name(@model)}</span>
-        <span class="toggle-icon collapsed" id={@toggle_id}></span>
-      </div>
-      <div class="middleware-model-content" id={@model_id} style="display: none;">
-        <pre class="config-value" phx-no-format><%= inspect(@model, pretty: true, limit: :infinity) %></pre>
-      </div>
-    </div>
-    """
-  end
-
-  defp middleware_config_entry(assigns) do
-    ~H"""
-    <div class="config-entry">
-      <div class="config-label">{format_config_key(@key)}</div>
-      <pre
-        class={"config-value #{if is_binary(@value), do: "config-value-text", else: ""}"}
-        phx-no-format
-      ><%= format_config_value(@value) %></pre>
-    </div>
-    """
-  end
-
-  defp get_model_name(model) when is_map(model) do
-    Map.get(model, :model) || Map.get(model, :__struct__) |> format_module_name()
-  end
-
-  defp get_model_name(_), do: "Unknown"
-
-  defp format_config_key(key) when is_atom(key), do: Atom.to_string(key)
-  defp format_config_key(key), do: inspect(key)
-
-  defp format_config_value(value) when is_binary(value), do: value
-  defp format_config_value(value), do: inspect(value, pretty: true, limit: :infinity)
+  # Note: middleware_section, middleware_item, middleware_model_config, middleware_config_entry,
+  # get_model_name, format_config_key, format_config_value, and format_module_name
+  # are now imported from SagentsLiveDebugger.Live.Components.MessageComponents
 
   defp tools_section(assigns) do
     ~H"""
@@ -1642,45 +1575,6 @@ defmodule SagentsLiveDebugger.AgentListLive do
           <% end %>
         </div>
       <% end %>
-    </div>
-    """
-  end
-
-  defp tool_item(assigns) do
-    # Generate unique IDs for this tool item
-    tool_id = "tool-#{:erlang.phash2(assigns.tool.name)}"
-    toggle_id = "toggle-#{tool_id}"
-
-    assigns = assign(assigns, :tool_id, tool_id)
-    assigns = assign(assigns, :toggle_id, toggle_id)
-
-    ~H"""
-    <div class="list-item">
-      <div
-        class="list-item-header middleware-header-clickable"
-        phx-click={
-          Phoenix.LiveView.JS.toggle(to: "##{@tool_id}")
-          |> Phoenix.LiveView.JS.toggle_class("collapsed", to: "##{@toggle_id}")
-        }
-      >
-        <span class="list-item-name">
-          {@tool.name}
-          <%= if @tool.async do %>
-            <span class="badge badge-async">Async</span>
-          <% end %>
-        </span>
-        <span class="toggle-icon collapsed" id={@toggle_id}></span>
-      </div>
-
-      <div class="middleware-content" id={@tool_id} style="display: none;">
-        <div class="list-item-description" style="white-space: pre-wrap;" phx-no-format><%= @tool.description %></div>
-        <%= if length(@tool.parameters || []) > 0 do %>
-          <div class="list-item-details">
-            <strong>Parameters:</strong>
-            <ul phx-no-format><%= for param <- @tool.parameters do %><li style="white-space: pre-wrap;"><code><%= param.name %></code><%= if param.required do %> <span class="badge badge-required">Required</span><% end %> - <%= param.description %></li><% end %></ul>
-          </div>
-        <% end %>
-      </div>
     </div>
     """
   end
@@ -2037,177 +1931,6 @@ defmodule SagentsLiveDebugger.AgentListLive do
     |> String.replace("_", " ")
   end
 
-  defp message_item(assigns) do
-    ~H"""
-    <div class={"message-item message-#{@message.role}"}>
-      <div class="message-header">
-        <span class="message-role">
-          {message_role_emoji(@message.role)}
-          {String.capitalize(to_string(@message.role))}
-        </span>
-        <%= if Map.get(@message, :status) do %>
-          <span class={"message-status status-#{Map.get(@message, :status)}"}>
-            {Map.get(@message, :status)}
-          </span>
-        <% end %>
-      </div>
-
-      <div class="message-content">
-        {render_message_content(@message)}
-      </div>
-
-      <%= if @message.tool_calls && @message.tool_calls != [] do %>
-        <div class="message-tool-calls">
-          <strong>Tool Calls:</strong>
-          <%= for tool_call <- @message.tool_calls do %>
-            <.tool_call_item tool_call={tool_call} />
-          <% end %>
-        </div>
-      <% end %>
-
-      <%= if @message.tool_results && @message.tool_results != [] do %>
-        <div class="message-tool-results">
-          <strong>Tool Results:</strong>
-          <%= for tool_result <- @message.tool_results do %>
-            <.tool_result_item tool_result={tool_result} />
-          <% end %>
-        </div>
-      <% end %>
-
-      <%= if @message.metadata && map_size(@message.metadata) > 0 do %>
-        <details class="message-metadata">
-          <summary>Metadata</summary>
-          <pre phx-no-format><%= inspect(@message.metadata, pretty: true, limit: :infinity) %></pre>
-        </details>
-      <% end %>
-    </div>
-    """
-  end
-
-  defp render_message_content(message) do
-    cond do
-      is_binary(message.content) ->
-        assigns = %{content: message.content}
-
-        ~H"""
-        <div class="formatted-content" phx-no-format><%= @content %></div>
-        """
-
-      is_list(message.content) ->
-        assigns = %{content: message.content}
-
-        ~H"""
-        <div class="multimodal-content">
-          <.content_part :for={part <- @content} part={part} />
-        </div>
-        """
-
-      true ->
-        assigns = %{content: inspect(message.content, limit: :infinity)}
-
-        ~H"""
-        <div class="formatted-content" phx-no-format><%= @content %></div>
-        """
-    end
-  end
-
-  defp content_part(assigns) do
-    part = assigns.part
-
-    cond do
-      is_map(part) && Map.get(part, :type) == :text ->
-        assigns = %{text: Map.get(part, :content, "")}
-
-        ~H"""
-        <div class="formatted-content content-part-text" phx-no-format><%= @text %></div>
-        """
-
-      is_map(part) && Map.get(part, :type) == :thinking ->
-        # Generate unique ID for this thinking block
-        thinking_id = "thinking-#{:erlang.phash2(part)}"
-
-        assigns = %{
-          content: Map.get(part, :content, ""),
-          thinking_id: thinking_id,
-          toggle_id: "toggle-#{thinking_id}"
-        }
-
-        ~H"""
-        <div class="content-part-thinking">
-          <div
-            class="thinking-header"
-            phx-click={
-              Phoenix.LiveView.JS.toggle(to: "##{@thinking_id}")
-              |> Phoenix.LiveView.JS.toggle_class("collapsed", to: "##{@toggle_id}")
-            }
-          >
-            <span class="thinking-label">💭 Thinking</span>
-            <span class="toggle-icon collapsed" id={@toggle_id}></span>
-          </div>
-          <div class="thinking-content-wrapper" id={@thinking_id} style="display: none;">
-            <div class="formatted-content thinking-content" phx-no-format><%= @content %></div>
-          </div>
-        </div>
-        """
-
-      is_map(part) && Map.get(part, :type) == :image ->
-        assigns = %{part: part}
-
-        ~H"""
-        <div class="content-part-image" phx-no-format>
-          [Image: <%= inspect(@part, limit: :infinity) %>]
-        </div>
-        """
-
-      true ->
-        assigns = %{part: part}
-
-        ~H"""
-        <div class="content-part-unknown" phx-no-format><%= inspect(@part, limit: :infinity) %></div>
-        """
-    end
-  end
-
-  defp tool_call_item(assigns) do
-    ~H"""
-    <div class="tool-call">
-      <div class="tool-call-header">
-        <span class="tool-name">🔧 {@tool_call.name}</span>
-        <%= if @tool_call.call_id do %>
-          <span class="tool-call-id">{@tool_call.call_id}</span>
-        <% end %>
-      </div>
-      <%= if @tool_call.arguments do %>
-        <div class="tool-arguments">
-          <strong>Arguments:</strong>
-          <pre phx-no-format><%= format_tool_arguments(@tool_call.arguments) %></pre>
-        </div>
-      <% end %>
-    </div>
-    """
-  end
-
-  defp tool_result_item(assigns) do
-    ~H"""
-    <div class="tool-result">
-      <div class="tool-result-header">
-        <span class="tool-name">✅ {@tool_result.name || "Result"}</span>
-        <%= if @tool_result.tool_call_id do %>
-          <span class="tool-call-id">{@tool_result.tool_call_id}</span>
-        <% end %>
-        <%= if Map.get(@tool_result, :status) do %>
-          <span class={"result-status status-#{Map.get(@tool_result, :status)}"}>
-            {Map.get(@tool_result, :status)}
-          </span>
-        <% end %>
-      </div>
-      <div class="tool-result-content">
-        <pre phx-no-format><%= format_tool_result(@tool_result.content) %></pre>
-      </div>
-    </div>
-    """
-  end
-
   defp detail_status_description(:running), do: "Processing message"
   defp detail_status_description(:idle), do: "Waiting for input"
   defp detail_status_description(:interrupted), do: "Awaiting human decision"
@@ -2230,50 +1953,7 @@ defmodule SagentsLiveDebugger.AgentListLive do
     end
   end
 
-  defp message_role_emoji(:system), do: "⚙️"
-  defp message_role_emoji(:user), do: "👤"
-  defp message_role_emoji(:assistant), do: "🤖"
-  defp message_role_emoji(:tool), do: "🔧"
-  defp message_role_emoji(_), do: "❓"
-
-  defp format_tool_arguments(arguments) when is_map(arguments) do
-    Jason.encode!(arguments, pretty: true)
-  rescue
-    _ -> inspect(arguments, limit: :infinity)
-  end
-
-  defp format_tool_arguments(arguments) when is_binary(arguments) do
-    case Jason.decode(arguments) do
-      {:ok, decoded} -> Jason.encode!(decoded, pretty: true)
-      {:error, _} -> arguments
-    end
-  rescue
-    _ -> arguments
-  end
-
-  defp format_tool_arguments(arguments), do: inspect(arguments, limit: :infinity)
-
-  defp format_tool_result(content) when is_binary(content) do
-    case Jason.decode(content) do
-      {:ok, decoded} -> Jason.encode!(decoded, pretty: true)
-      {:error, _} -> content
-    end
-  rescue
-    _ -> content
-  end
-
-  defp format_tool_result(content), do: inspect(content, pretty: true, limit: :infinity)
-
-  # Helper to format module names by removing "Elixir." prefix
-  defp format_module_name(module) when is_atom(module) do
-    module
-    |> Atom.to_string()
-    |> String.replace_prefix("Elixir.", "")
-    |> String.split(".")
-    |> List.last()
-  end
-
-  defp format_module_name(module), do: inspect(module, limit: :infinity)
+  # Note: format_module_name is imported from MessageComponents
 
   # Event Filtering and Formatting
 
@@ -2512,6 +2192,10 @@ defmodule SagentsLiveDebugger.AgentListLive do
           raw: display_message
         }
 
+      # Sub-agent events - wrapped as {:subagent, sub_agent_id, inner_event}
+      {:subagent, sub_agent_id, inner_event} ->
+        format_subagent_event(sub_agent_id, inner_event)
+
       other ->
         # Generic fallback for unknown events
         event_type = extract_event_type(other)
@@ -2542,6 +2226,99 @@ defmodule SagentsLiveDebugger.AgentListLive do
   defp format_action_data(action_data) do
     inspect(action_data, limit: 100)
   end
+
+  # Format sub-agent events for display in the event stream
+  defp format_subagent_event(sub_agent_id, {:subagent_started, data}) do
+    name = data[:name] || "general-purpose"
+
+    %{
+      type: "subagent_started",
+      sub_agent_id: sub_agent_id,
+      name: name,
+      model: data[:model],
+      tools: data[:tools] || [],
+      summary: "SubAgent started: #{name}"
+    }
+  end
+
+  defp format_subagent_event(sub_agent_id, {:subagent_status_changed, status}) do
+    %{
+      type: "subagent_status_changed",
+      sub_agent_id: sub_agent_id,
+      status: to_string(status),
+      summary: "SubAgent #{short_id(sub_agent_id)}: #{status}"
+    }
+  end
+
+  defp format_subagent_event(sub_agent_id, {:subagent_completed, data}) do
+    duration = format_duration(data[:duration_ms])
+
+    %{
+      type: "subagent_completed",
+      sub_agent_id: sub_agent_id,
+      duration_ms: data[:duration_ms],
+      result_preview: String.slice(data[:result] || "", 0, 100),
+      summary: "SubAgent #{short_id(sub_agent_id)} completed (#{duration})"
+    }
+  end
+
+  defp format_subagent_event(sub_agent_id, {:subagent_error, reason}) do
+    %{
+      type: "subagent_error",
+      sub_agent_id: sub_agent_id,
+      error: inspect(reason, limit: 100),
+      summary: "SubAgent #{short_id(sub_agent_id)} error"
+    }
+  end
+
+  defp format_subagent_event(sub_agent_id, {:subagent_llm_message, message}) do
+    role = message.role || :unknown
+
+    %{
+      type: "subagent_llm_message",
+      sub_agent_id: sub_agent_id,
+      role: to_string(role),
+      summary: "SubAgent #{short_id(sub_agent_id)}: #{role} message"
+    }
+  end
+
+  defp format_subagent_event(sub_agent_id, {:subagent_llm_deltas, deltas}) do
+    count = length(List.flatten([deltas]))
+
+    %{
+      type: "subagent_llm_deltas",
+      sub_agent_id: sub_agent_id,
+      delta_count: count,
+      summary: "SubAgent #{short_id(sub_agent_id)}: streaming"
+    }
+  end
+
+  defp format_subagent_event(sub_agent_id, event) do
+    # Catch-all for unknown subagent events
+    event_type =
+      case event do
+        {type, _} when is_atom(type) -> to_string(type)
+        {type, _, _} when is_atom(type) -> to_string(type)
+        _ -> "unknown"
+      end
+
+    %{
+      type: "subagent_#{event_type}",
+      sub_agent_id: sub_agent_id,
+      raw: inspect(event, limit: 100),
+      summary: "SubAgent #{short_id(sub_agent_id)}: #{event_type}"
+    }
+  end
+
+  # Helper to shorten subagent IDs for display
+  defp short_id(sub_agent_id) when is_binary(sub_agent_id) do
+    case String.split(sub_agent_id, "-sub-") do
+      [_parent, suffix] -> "sub-#{suffix}"
+      _ -> String.slice(sub_agent_id, -10, 10)
+    end
+  end
+
+  defp short_id(sub_agent_id), do: inspect(sub_agent_id)
 
   defp extract_event_type(event) when is_tuple(event) do
     case event do
@@ -2630,4 +2407,109 @@ defmodule SagentsLiveDebugger.AgentListLive do
   end
 
   defp validate_timezone(_), do: {:error, :invalid_timezone}
+
+  ## Sub-Agent Event Handling and State Management
+
+  # Handle sub-agent events and update the subagents state
+  defp handle_subagent_event(socket, sub_agent_id, {:subagent_started, data}) do
+    subagent_entry = %{
+      id: sub_agent_id,
+      parent_id: data.parent_id,
+      name: data.name || "general-purpose",
+      instructions: data.instructions,
+      tools: data.tools || [],
+      middleware: data[:middleware] || [],
+      model: data.model,
+      status: :starting,
+      started_at: DateTime.utc_now(),
+      messages: [],
+      streaming_content: "",
+      result: nil,
+      duration_ms: nil,
+      error: nil,
+      expanded: false,
+      token_usage: nil
+    }
+
+    update(socket, :subagents, &Map.put(&1, sub_agent_id, subagent_entry))
+  end
+
+  defp handle_subagent_event(socket, sub_agent_id, {:subagent_status_changed, status}) do
+    update_subagent(socket, sub_agent_id, %{status: status})
+  end
+
+  defp handle_subagent_event(socket, sub_agent_id, {:subagent_llm_message, message}) do
+    update(socket, :subagents, fn subagents ->
+      case Map.get(subagents, sub_agent_id) do
+        nil ->
+          subagents
+
+        existing ->
+          updated = %{
+            existing
+            | messages: existing.messages ++ [message],
+              streaming_content: ""
+          }
+
+          Map.put(subagents, sub_agent_id, updated)
+      end
+    end)
+  end
+
+  defp handle_subagent_event(socket, sub_agent_id, {:subagent_llm_deltas, deltas}) do
+    update(socket, :subagents, fn subagents ->
+      case Map.get(subagents, sub_agent_id) do
+        nil ->
+          subagents
+
+        existing ->
+          new_content =
+            Enum.reduce(List.flatten([deltas]), existing.streaming_content, fn delta, acc ->
+              acc <> (delta.content || "")
+            end)
+
+          updated = %{existing | streaming_content: new_content}
+          Map.put(subagents, sub_agent_id, updated)
+      end
+    end)
+  end
+
+  defp handle_subagent_event(socket, sub_agent_id, {:subagent_completed, data}) do
+    update(socket, :subagents, fn subagents ->
+      case Map.get(subagents, sub_agent_id) do
+        nil ->
+          subagents
+
+        existing ->
+          updated = %{
+            existing
+            | status: :completed,
+              result: data.result,
+              messages: data.messages || existing.messages,
+              duration_ms: data.duration_ms,
+              streaming_content: "",
+              token_usage: data[:token_usage]
+          }
+
+          Map.put(subagents, sub_agent_id, updated)
+      end
+    end)
+  end
+
+  defp handle_subagent_event(socket, sub_agent_id, {:subagent_error, reason}) do
+    update_subagent(socket, sub_agent_id, %{status: :error, error: reason})
+  end
+
+  # Catch-all for unhandled subagent events
+  defp handle_subagent_event(socket, _sub_agent_id, _event), do: socket
+
+  # Helper to update a single field in a subagent
+  defp update_subagent(socket, sub_agent_id, updates) do
+    update(socket, :subagents, fn subagents ->
+      case Map.get(subagents, sub_agent_id) do
+        nil -> subagents
+        existing -> Map.put(subagents, sub_agent_id, Map.merge(existing, updates))
+      end
+    end)
+  end
 end
