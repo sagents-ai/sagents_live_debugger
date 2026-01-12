@@ -31,7 +31,7 @@ defmodule SagentsLiveDebugger.AgentListLive do
   # 3. Auto-Follow First:
   #    - Automatically follows the first matching agent that appears
   #    - Configurable via auto_follow_first assign
-  #    - Filter matching for production use (conversation_id, project_id, etc.)
+  #    - Filter matching for production use (conversation_id, custom scope fields, etc.)
   #
   # Subscription Management:
   #    - Subscribe when entering detail view
@@ -548,21 +548,11 @@ defmodule SagentsLiveDebugger.AgentListLive do
         conversation_id: Map.get(meta, :conversation_id),
         last_activity: Map.get(meta, :last_activity_at),
         started_at: Map.get(meta, :started_at),
-        uptime_ms: calculate_uptime_ms(Map.get(meta, :started_at)),
         viewer_count: get_viewer_count_from_presence(coordinator, Map.get(meta, :conversation_id)),
-        node: Map.get(meta, :node),
-        # Include filter fields for production filtering
-        project_id: Map.get(meta, :project_id),
-        user_id: Map.get(meta, :user_id)
+        node: Map.get(meta, :node)
       }
     end)
     |> Enum.sort_by(& &1.last_activity, {:desc, DateTime})
-  end
-
-  defp calculate_uptime_ms(nil), do: nil
-
-  defp calculate_uptime_ms(started_at) do
-    DateTime.diff(DateTime.utc_now(), started_at, :millisecond)
   end
 
   defp get_viewer_count_from_presence(_coordinator, nil), do: 0
@@ -621,9 +611,10 @@ defmodule SagentsLiveDebugger.AgentListLive do
   defp matches_any_agent_filter?(agent, filters) do
     Enum.any?(filters, fn
       {:conversation_id, id} -> agent.conversation_id == id
-      {:project_id, id} -> agent.project_id == id
-      {:user_id, id} -> agent.user_id == id
       {:agent_id, id} -> agent.agent_id == id
+      # Generic filter matching for custom fields (e.g., project_id, user_id)
+      # These come from presence metadata and may vary by integration
+      {key, id} when is_atom(key) -> Map.get(agent, key) == id
       _ -> false
     end)
   end
@@ -738,9 +729,10 @@ defmodule SagentsLiveDebugger.AgentListLive do
   defp matches_any_filter?(meta, filters) do
     Enum.any?(filters, fn
       {:conversation_id, id} -> Map.get(meta, :conversation_id) == id
-      {:project_id, id} -> Map.get(meta, :project_id) == id
-      {:user_id, id} -> Map.get(meta, :user_id) == id
       {:agent_id, id} -> Map.get(meta, :agent_id) == id
+      # Generic filter matching for custom fields from presence metadata
+      # (e.g., project_id, user_id - varies by integration)
+      {key, id} when is_atom(key) -> Map.get(meta, key) == id
       _ -> false
     end)
   end
@@ -955,6 +947,105 @@ defmodule SagentsLiveDebugger.AgentListLive do
       </script>
     </div>
 
+    <!-- Self-contained TimeAgo script - updates relative times client-side -->
+    <div phx-update="ignore" id="sagents-time-ago-script-container">
+      <script>
+        (function() {
+          // Prevent multiple initializations
+          if (window.__sagentsTimeAgoInitialized) return;
+          window.__sagentsTimeAgoInitialized = true;
+
+          var UPDATE_INTERVAL_MS = 2000; // Update every 2 seconds
+          var intervalId = null;
+
+          function formatTimeAgo(isoTimestamp) {
+            if (!isoTimestamp) return '—';
+            var now = new Date();
+            var then = new Date(isoTimestamp);
+            var diffSeconds = Math.floor((now - then) / 1000);
+
+            if (diffSeconds < 0) return 'Just now';
+            if (diffSeconds < 5) return 'Just now';
+            if (diffSeconds < 60) return diffSeconds + ' seconds ago';
+            if (diffSeconds < 3600) {
+              var mins = Math.floor(diffSeconds / 60);
+              return mins + (mins === 1 ? ' minute ago' : ' minutes ago');
+            }
+            if (diffSeconds < 86400) {
+              var hours = Math.floor(diffSeconds / 3600);
+              return hours + (hours === 1 ? ' hour ago' : ' hours ago');
+            }
+            var days = Math.floor(diffSeconds / 86400);
+            return days + (days === 1 ? ' day ago' : ' days ago');
+          }
+
+          function formatDuration(isoTimestamp) {
+            if (!isoTimestamp) return '—';
+            var now = new Date();
+            var start = new Date(isoTimestamp);
+            var ms = now - start;
+
+            if (ms < 0) return '0s';
+
+            var seconds = Math.floor(ms / 1000);
+            var minutes = Math.floor(seconds / 60);
+            var hours = Math.floor(minutes / 60);
+
+            if (hours > 0) return hours + 'h ' + (minutes % 60) + 'm';
+            if (minutes > 0) return minutes + 'm ' + (seconds % 60) + 's';
+            return seconds + 's';
+          }
+
+          function updateTimeElements() {
+            // Update "time ago" elements (Last Activity)
+            document.querySelectorAll('[data-time-ago]').forEach(function(el) {
+              var timestamp = el.getAttribute('data-time-ago');
+              if (timestamp) {
+                el.textContent = formatTimeAgo(timestamp);
+              }
+            });
+
+            // Update duration elements (Uptime)
+            document.querySelectorAll('[data-duration-since]').forEach(function(el) {
+              var timestamp = el.getAttribute('data-duration-since');
+              if (timestamp) {
+                el.textContent = formatDuration(timestamp);
+              }
+            });
+          }
+
+          function startUpdates() {
+            // Run initial update
+            updateTimeElements();
+            // Start interval if not already running
+            if (!intervalId) {
+              intervalId = setInterval(updateTimeElements, UPDATE_INTERVAL_MS);
+            }
+          }
+
+          // Wait for DOM to be ready before first update
+          if (document.readyState === 'loading') {
+            document.addEventListener('DOMContentLoaded', startUpdates);
+          } else {
+            // DOM already loaded, use requestAnimationFrame to ensure render is complete
+            requestAnimationFrame(function() {
+              setTimeout(startUpdates, 50);
+            });
+          }
+
+          // Re-update after LiveView patches the DOM
+          window.addEventListener('phx:update', function() {
+            setTimeout(updateTimeElements, 50);
+          });
+
+          // Also listen for page load events (navigation, reconnects)
+          window.addEventListener('phx:page-loading-stop', function() {
+            setTimeout(startUpdates, 100);
+          });
+        })();
+      </script>
+    </div>
+
     <%= case @view_mode do %>
       <% :list -> %>
         {render_list_view(assigns)}
@@ -1081,7 +1172,13 @@ defmodule SagentsLiveDebugger.AgentListLive do
         <div class="agent-detail-content">
           <%= case @current_tab do %>
             <% :overview -> %>
-              <.overview_tab agent={@agent_detail} metadata={@agent_metadata} state={@agent_state} />
+              <.overview_tab
+                agent={@agent_detail}
+                metadata={@agent_metadata}
+                state={@agent_state}
+                presence_module={@presence_module}
+                agent_id={@selected_agent_id}
+              />
             <% :messages -> %>
               <.messages_tab state={@agent_state} agent={@agent_detail} />
             <% :middleware -> %>
@@ -1260,16 +1357,20 @@ defmodule SagentsLiveDebugger.AgentListLive do
       </td>
       <td class="text-gray">
         <%= if @agent.last_activity do %>
-          {format_time_ago(@agent.last_activity)}
+          <span data-time-ago={DateTime.to_iso8601(@agent.last_activity)}>
+            {format_time_ago(@agent.last_activity)}
+          </span>
         <% else %>
-          <span class="text-muted">-</span>
+          <span class="text-muted">—</span>
         <% end %>
       </td>
       <td class="text-gray">
-        <%= if @agent.uptime_ms do %>
-          {format_duration(@agent.uptime_ms)}
+        <%= if @agent.started_at do %>
+          <span data-duration-since={DateTime.to_iso8601(@agent.started_at)}>
+            {format_duration_from_start(@agent.started_at)}
+          </span>
         <% else %>
-          <span class="text-muted">-</span>
+          <span class="text-muted">—</span>
         <% end %>
       </td>
       <td class="actions-cell">
@@ -1350,15 +1451,41 @@ defmodule SagentsLiveDebugger.AgentListLive do
 
   defp format_duration(_), do: "—"
 
+  # Format duration from a start DateTime to now
+  defp format_duration_from_start(nil), do: "—"
+
+  defp format_duration_from_start(started_at) do
+    ms = DateTime.diff(DateTime.utc_now(), started_at, :millisecond)
+    format_duration(ms)
+  end
+
+  # Get presence metadata for a specific agent
+  # This is the source of truth for agent timing data (started_at, last_activity_at)
+  defp get_agent_presence_metadata(nil, _agent_id), do: nil
+
+  defp get_agent_presence_metadata(presence_module, agent_id) do
+    presences = LangChain.Presence.list(presence_module, @agent_presence_topic)
+
+    case Map.get(presences, agent_id) do
+      %{metas: [meta | _]} -> meta
+      _ -> nil
+    end
+  end
+
   # Detail View Components (from AgentDetailLive)
 
   # Overview Tab
   defp overview_tab(assigns) do
+    # Get started_at from presence metadata (source of truth for timing data)
+    presence_meta = get_agent_presence_metadata(assigns.presence_module, assigns.agent_id)
+    started_at = if presence_meta, do: Map.get(presence_meta, :started_at), else: nil
+    assigns = assign(assigns, :started_at, started_at)
+
     ~H"""
     <div class="overview-tab">
       <%= if @metadata do %>
         <.agent_info_section agent={@agent} metadata={@metadata} />
-        <.detail_status_section metadata={@metadata} />
+        <.detail_status_section metadata={@metadata} started_at={@started_at} />
         <%= if @agent do %>
           <.model_section agent={@agent} />
         <% end %>
@@ -1410,7 +1537,21 @@ defmodule SagentsLiveDebugger.AgentListLive do
         <%= if @metadata.last_activity_at do %>
           <div class="info-row">
             <span class="info-label">Last Activity:</span>
-            <span class="info-value">{detail_format_time_ago(@metadata.last_activity_at)}</span>
+            <span class="info-value">
+              <span data-time-ago={DateTime.to_iso8601(@metadata.last_activity_at)}>
+                {detail_format_time_ago(@metadata.last_activity_at)}
+              </span>
+            </span>
+          </div>
+        <% end %>
+        <%= if @started_at do %>
+          <div class="info-row">
+            <span class="info-label">Uptime:</span>
+            <span class="info-value">
+              <span data-duration-since={DateTime.to_iso8601(@started_at)}>
+                {format_duration_from_start(@started_at)}
+              </span>
+            </span>
           </div>
         <% end %>
       </div>

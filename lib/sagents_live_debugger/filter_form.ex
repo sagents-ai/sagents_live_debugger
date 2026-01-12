@@ -105,12 +105,16 @@ defmodule SagentsLiveDebugger.FilterForm do
   end
 
   defp sort_agents(agents, :uptime) do
+    # Sort by started_at ascending (oldest first = longest running first)
     Enum.sort_by(
       agents,
       fn agent ->
-        agent.uptime_ms || 0
+        case agent.started_at do
+          nil -> DateTime.utc_now()
+          datetime -> datetime
+        end
       end,
-      :desc
+      {:asc, DateTime}
     )
   end
 end
