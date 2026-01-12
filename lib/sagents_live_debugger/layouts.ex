@@ -383,7 +383,6 @@ defmodule SagentsLiveDebugger.Layouts do
       display: flex;
       justify-content: space-between;
       align-items: center;
-      margin-bottom: 0.5rem;
     }
 
     .list-item-name {
@@ -400,6 +399,7 @@ defmodule SagentsLiveDebugger.Layouts do
 
     .list-item-description {
       color: #6b7280;
+      margin-top: 0.5rem;
       margin-bottom: 0.5rem;
     }
 

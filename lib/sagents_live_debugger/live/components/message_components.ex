@@ -95,9 +95,11 @@ defmodule SagentsLiveDebugger.Live.Components.MessageComponents do
   Renders a single content part (text, thinking, image, etc.).
   """
   attr :part, :map, required: true
+  attr :prefix, :string, default: ""
 
   def content_part(assigns) do
     part = assigns.part
+    prefix = assigns[:prefix] || ""
 
     cond do
       is_map(part) && Map.get(part, :type) == :text ->
@@ -109,7 +111,7 @@ defmodule SagentsLiveDebugger.Live.Components.MessageComponents do
 
       is_map(part) && Map.get(part, :type) == :thinking ->
         # Generate unique ID for this thinking block
-        thinking_id = "thinking-#{:erlang.phash2(part)}"
+        thinking_id = "#{prefix}thinking-#{:erlang.phash2(part)}"
 
         assigns = %{
           content: Map.get(part, :content, ""),
@@ -205,19 +207,36 @@ defmodule SagentsLiveDebugger.Live.Components.MessageComponents do
 
   @doc """
   Renders a tool item with expandable description and parameters.
-  Expects a tool struct with name, description, parameters, and async fields.
+  Expects a tool struct or map with name, description, parameters, and async fields.
+
+  The prefix attribute is used to create unique DOM IDs when the same tool
+  is displayed in multiple contexts (e.g., main agent vs sub-agent views).
   """
   attr :tool, :map, required: true
+  attr :prefix, :string, default: ""
 
   def tool_item(assigns) do
+    # Extract tool fields safely (works for both structs and maps)
+    tool = assigns.tool
+    prefix = assigns[:prefix] || ""
+
+    tool_name = get_tool_field(tool, :name)
+    tool_async = get_tool_field(tool, :async)
+    tool_description = get_tool_field(tool, :description)
+    tool_parameters = get_tool_field(tool, :parameters) || []
+
     # Generate unique IDs for this tool item
-    tool_id = "tool-#{:erlang.phash2(assigns.tool.name)}"
+    tool_id = "#{prefix}tool-#{:erlang.phash2(tool_name)}"
     toggle_id = "toggle-#{tool_id}"
 
     assigns =
       assigns
       |> assign(:tool_id, tool_id)
       |> assign(:toggle_id, toggle_id)
+      |> assign(:tool_name, tool_name)
+      |> assign(:tool_async, tool_async)
+      |> assign(:tool_description, tool_description)
+      |> assign(:tool_parameters, tool_parameters)
 
     ~H"""
     <div class="list-item">
@@ -229,8 +248,8 @@ defmodule SagentsLiveDebugger.Live.Components.MessageComponents do
         }
       >
         <span class="list-item-name">
-          {@tool.name}
-          <%= if @tool[:async] do %>
+          {@tool_name}
+          <%= if @tool_async do %>
             <span class="badge badge-async">Async</span>
           <% end %>
         </span>
@@ -238,17 +257,28 @@ defmodule SagentsLiveDebugger.Live.Components.MessageComponents do
       </div>
 
       <div class="middleware-content" id={@tool_id} style="display: none;">
-        <div class="list-item-description" style="white-space: pre-wrap;" phx-no-format><%= @tool[:description] || "No description available" %></div>
-        <%= if length(@tool[:parameters] || []) > 0 do %>
+        <div class="list-item-description" style="white-space: pre-wrap;" phx-no-format><%= @tool_description || "No description available" %></div>
+        <%= if @tool_parameters != [] do %>
           <div class="list-item-details">
             <strong>Parameters:</strong>
-            <ul phx-no-format><%= for param <- @tool.parameters do %><li style="white-space: pre-wrap;"><code><%= param.name %></code><%= if param.required do %> <span class="badge badge-required">Required</span><% end %> - <%= param.description %></li><% end %></ul>
+            <ul phx-no-format><%= for param <- @tool_parameters do %><li style="white-space: pre-wrap;"><code><%= get_tool_field(param, :name) %></code><%= if get_tool_field(param, :required) do %> <span class="badge badge-required">Required</span><% end %> - <%= get_tool_field(param, :description) %></li><% end %></ul>
           </div>
         <% end %>
       </div>
     </div>
     """
   end
+
+  # Helper to safely access tool fields from either structs or maps
+  defp get_tool_field(tool, field) when is_struct(tool) do
+    Map.get(tool, field)
+  end
+
+  defp get_tool_field(tool, field) when is_map(tool) do
+    Map.get(tool, field) || Map.get(tool, to_string(field))
+  end
+
+  defp get_tool_field(_, _), do: nil
 
   ## Middleware Components
   #
@@ -258,10 +288,16 @@ defmodule SagentsLiveDebugger.Live.Components.MessageComponents do
   @doc """
   Renders a middleware section with a list of middleware entries.
   Expects an agent struct with a middleware field containing MiddlewareEntry structs.
+
+  The prefix attribute is used to create unique DOM IDs when middleware
+  is displayed in multiple contexts (e.g., main agent vs sub-agent views).
   """
   attr :agent, :map, required: true
+  attr :prefix, :string, default: ""
 
   def middleware_section(assigns) do
+    assigns = assign_new(assigns, :prefix, fn -> "" end)
+
     ~H"""
     <div class="info-section">
       <h3>🔧 Middleware ({length(@agent.middleware)})</h3>
@@ -270,7 +306,7 @@ defmodule SagentsLiveDebugger.Live.Components.MessageComponents do
       <% else %>
         <div class="list-card">
           <%= for entry <- @agent.middleware do %>
-            <.middleware_item entry={entry} />
+            <.middleware_item entry={entry} prefix={@prefix} />
           <% end %>
         </div>
       <% end %>
@@ -281,16 +317,22 @@ defmodule SagentsLiveDebugger.Live.Components.MessageComponents do
   @doc """
   Renders a single middleware item with expandable configuration.
   Expects a MiddlewareEntry struct with id and config fields.
+
+  The prefix attribute is used to create unique DOM IDs when the same middleware
+  is displayed in multiple contexts (e.g., main agent vs sub-agent views).
   """
   attr :entry, :map, required: true
+  attr :prefix, :string, default: ""
 
   def middleware_item(assigns) do
+    prefix = assigns[:prefix] || ""
+
     # Filter out agent_id and model from config
     config_without_special = Map.drop(assigns.entry.config, [:agent_id, :model])
     model = Map.get(assigns.entry.config, :model)
 
     # Generate unique IDs for this middleware item
-    middleware_id = "middleware-#{:erlang.phash2(assigns.entry.id)}"
+    middleware_id = "#{prefix}middleware-#{:erlang.phash2(assigns.entry.id)}"
     toggle_id = "toggle-#{middleware_id}"
 
     assigns =
@@ -299,6 +341,7 @@ defmodule SagentsLiveDebugger.Live.Components.MessageComponents do
       |> assign(:model, model)
       |> assign(:middleware_id, middleware_id)
       |> assign(:toggle_id, toggle_id)
+      |> assign(:prefix, prefix)
 
     ~H"""
     <div class="list-item">
@@ -315,7 +358,7 @@ defmodule SagentsLiveDebugger.Live.Components.MessageComponents do
 
       <div class="middleware-content" id={@middleware_id} style="display: none;">
         <%= if @model do %>
-          <.middleware_model_config model={@model} entry_id={@entry.id} />
+          <.middleware_model_config model={@model} entry_id={@entry.id} prefix={@prefix} />
         <% end %>
 
         <%= if map_size(@config_without_special) > 0 do %>
@@ -335,10 +378,13 @@ defmodule SagentsLiveDebugger.Live.Components.MessageComponents do
   """
   attr :model, :map, required: true
   attr :entry_id, :any, required: true
+  attr :prefix, :string, default: ""
 
   def middleware_model_config(assigns) do
+    prefix = assigns[:prefix] || ""
+
     # Generate unique ID for this model config
-    model_id = "model-#{:erlang.phash2(assigns.entry_id)}"
+    model_id = "#{prefix}model-#{:erlang.phash2(assigns.entry_id)}"
     toggle_id = "toggle-#{model_id}"
 
     assigns =

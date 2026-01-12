@@ -1571,7 +1571,7 @@ defmodule SagentsLiveDebugger.AgentListLive do
       <% else %>
         <div class="list-card">
           <%= for tool <- @agent.tools do %>
-            <.tool_item tool={tool} />
+            <.tool_item tool={tool} prefix="main-" />
           <% end %>
         </div>
       <% end %>
@@ -1709,7 +1709,7 @@ defmodule SagentsLiveDebugger.AgentListLive do
     ~H"""
     <div class="middleware-tab">
       <%= if @agent do %>
-        <.middleware_section agent={@agent} />
+        <.middleware_section agent={@agent} prefix="main-" />
       <% else %>
         <p class="loading">Loading middleware data...</p>
       <% end %>

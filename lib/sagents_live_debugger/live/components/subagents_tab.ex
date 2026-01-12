@@ -254,6 +254,10 @@ defmodule SagentsLiveDebugger.Live.Components.SubagentsTab do
   attr :subagent, :map, required: true
 
   def tools_view(assigns) do
+    # Create a unique prefix based on sub-agent ID to avoid DOM ID collisions
+    prefix = "subagent-#{assigns.subagent.id}-"
+    assigns = assign(assigns, :prefix, prefix)
+
     ~H"""
     <div class="subagent-tools-view">
       <%= if @subagent.tools == [] do %>
@@ -263,7 +267,7 @@ defmodule SagentsLiveDebugger.Live.Components.SubagentsTab do
       <% else %>
         <div class="list-card">
           <%= for tool <- @subagent.tools do %>
-            <.tool_item tool={tool} />
+            <.tool_item tool={tool} prefix={@prefix} />
           <% end %>
         </div>
       <% end %>
@@ -280,6 +284,10 @@ defmodule SagentsLiveDebugger.Live.Components.SubagentsTab do
   attr :subagent, :map, required: true
 
   def subagent_middleware_view(assigns) do
+    # Create a unique prefix based on sub-agent ID to avoid DOM ID collisions
+    prefix = "subagent-#{assigns.subagent.id}-"
+    assigns = assign(assigns, :prefix, prefix)
+
     ~H"""
     <div class="subagent-middleware-view">
       <%= if @subagent.middleware == [] do %>
@@ -289,7 +297,7 @@ defmodule SagentsLiveDebugger.Live.Components.SubagentsTab do
       <% else %>
         <div class="list-card">
           <%= for entry <- @subagent.middleware do %>
-            <.middleware_item entry={entry} />
+            <.middleware_item entry={entry} prefix={@prefix} />
           <% end %>
         </div>
       <% end %>
