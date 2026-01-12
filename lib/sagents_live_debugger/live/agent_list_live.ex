@@ -3,19 +3,23 @@ defmodule SagentsLiveDebugger.AgentListLive do
   require Logger
 
   import SagentsLiveDebugger.CoreComponents
-  alias SagentsLiveDebugger.{Discovery, Metrics, FilterForm}
+  alias SagentsLiveDebugger.{Metrics, FilterForm}
+
+  # Presence topics for debugger discovery
+  @debug_viewers_topic "debug_viewers"
+  @agent_presence_topic "agent_server:presence"
 
   # Event-Driven Architecture Notes:
   #
-  # This LiveView uses a hybrid approach for updates:
+  # This LiveView is entirely event-driven (NO POLLING):
   #
   # 1. Agent List View:
-  #    - Refreshes every 2 seconds via :refresh timer
-  #    - Shows agent discovery, status badges, metrics
-  #    - Subscribes to all agent regular topics for status updates
+  #    - Built from presence metadata (agent_server:presence topic)
+  #    - Real-time updates via presence_diff events when agents join/leave
+  #    - Status and activity updates come through presence metadata changes
+  #    - Viewer counts via conversation presence topics
   #
   # 2. Agent Detail View:
-  #    - NO polling - entirely event-driven
   #    - Subscribes to both regular and debug PubSub topics
   #    - Real-time updates via handle_info event handlers:
   #      - :todos_updated -> Updates TODOs tab
@@ -24,13 +28,15 @@ defmodule SagentsLiveDebugger.AgentListLive do
   #      - :middleware_action -> Adds to Events stream
   #      - All events -> Added to Events tab stream
   #
+  # 3. Auto-Follow First:
+  #    - Automatically follows the first matching agent that appears
+  #    - Configurable via auto_follow_first assign
+  #    - Filter matching for production use (conversation_id, project_id, etc.)
+  #
   # Subscription Management:
   #    - Subscribe when entering detail view
   #    - Unsubscribe when leaving detail view or switching agents
   #    - Tracked via :subscribed_agent_id assign
-
-  # 2 seconds
-  @refresh_interval 2_000
 
   def mount(_params, _session, socket) do
     # Configuration comes from on_mount callback via socket assigns
@@ -39,17 +45,20 @@ defmodule SagentsLiveDebugger.AgentListLive do
     # Ensure user_timezone is set (comes from SessionConfig, default to UTC if missing)
     user_timezone = Map.get(socket.assigns, :user_timezone, "UTC")
 
-    # Schedule periodic refresh
-    if connected?(socket) do
-      schedule_refresh()
+    # NO polling - agent list is entirely presence-driven
+
+    # Track debugger presence and subscribe to agent presence topic (for discovery)
+    if connected?(socket) && presence_module do
+      pubsub_name = coordinator.pubsub_name()
+      track_debugger_presence(presence_module, socket.id)
+      subscribe_to_agent_presence(pubsub_name)
     end
 
-    # Initial data load
-    agents = Discovery.list_agents(coordinator)
+    # Build initial agent list from presence (not Discovery polling)
+    agents = build_agents_from_presence(presence_module, coordinator)
     metrics = Metrics.calculate_metrics(agents)
 
-    # Subscribe to presence changes for conversation agents (if configured)
-    # Get pubsub_name from coordinator if presence tracking is enabled
+    # Subscribe to presence changes for conversation agents (for viewer counts)
     subscribed_topics =
       if presence_module do
         pubsub_name = coordinator.pubsub_name()
@@ -62,6 +71,11 @@ defmodule SagentsLiveDebugger.AgentListLive do
     filter_changeset =
       FilterForm.new()
       |> FilterForm.changeset(%{})
+
+    # Auto-follow configuration - enabled by default in dev
+    env = Application.get_env(:sagents_live_debugger, :env, :dev)
+    auto_follow_default = env == :dev
+    debug_filters = if env == :dev, do: :all, else: :none
 
     socket =
       socket
@@ -79,6 +93,17 @@ defmodule SagentsLiveDebugger.AgentListLive do
       |> assign(:current_tab, :overview)
       |> assign(:event_stream, [])
       |> assign(:subscribed_agent_id, nil)
+      # Auto-follow state
+      |> assign(:auto_follow_first, auto_follow_default)
+      |> assign(:followed_agent_id, nil)
+      |> assign(:debug_filters, debug_filters)
+      # Sub-agents state (for Phase 4)
+      |> assign(:subagents, %{})
+      |> assign(:expanded_subagent, nil)
+      |> assign(:subagent_tab, "config")
+
+    # Auto-follow first existing agent if auto-follow is enabled
+    socket = maybe_auto_follow_existing_agent(socket, agents, auto_follow_default, debug_filters)
 
     {:ok, socket}
   end
@@ -173,11 +198,29 @@ defmodule SagentsLiveDebugger.AgentListLive do
 
   defp maybe_clear_event_stream(socket, previous_agent_id, current_agent_id) do
     # Only clear event_stream when switching to a different agent
-    # Keep events when switching tabs or reloading the same agent detail view
-    if previous_agent_id != current_agent_id do
-      assign(socket, :event_stream, [])
-    else
-      socket
+    # Keep events when:
+    # - Switching tabs or reloading the same agent detail view
+    # - Entering detail view for an agent we've been following (preserve buffered events)
+    followed_id = socket.assigns[:followed_agent_id]
+    event_count = length(socket.assigns[:event_stream] || [])
+
+    Logger.debug("[ClearEvents] previous=#{inspect(previous_agent_id)}, current=#{inspect(current_agent_id)}, followed=#{inspect(followed_id)}, event_count=#{event_count}")
+
+    cond do
+      # Same agent - keep events (tab switch)
+      previous_agent_id == current_agent_id ->
+        Logger.debug("[ClearEvents] Keeping events - same agent (tab switch)")
+        socket
+
+      # Entering detail view for followed agent - keep buffered events
+      current_agent_id == followed_id ->
+        Logger.debug("[ClearEvents] Keeping events - entering detail for followed agent")
+        socket
+
+      # Switching to a different agent - clear events
+      true ->
+        Logger.debug("[ClearEvents] Clearing events - switching to different agent")
+        assign(socket, :event_stream, [])
     end
   end
 
@@ -204,43 +247,6 @@ defmodule SagentsLiveDebugger.AgentListLive do
     :ok = LangChain.Agents.AgentServer.unsubscribe_debug(agent_id)
   end
 
-  def handle_info(:refresh, socket) do
-    # Only refresh agent list and metrics
-    agents = Discovery.list_agents(socket.assigns.coordinator)
-    metrics = Metrics.calculate_metrics(agents)
-
-    # Subscribe to any new conversation agents
-    subscribed_topics =
-      if socket.assigns.presence_module do
-        pubsub_name = socket.assigns.coordinator.pubsub_name()
-
-        subscribe_to_new_conversation_agents(
-          pubsub_name,
-          agents,
-          socket.assigns.subscribed_topics
-        )
-      else
-        socket.assigns.subscribed_topics
-      end
-
-    socket =
-      socket
-      |> assign(:agents, agents)
-      |> assign(:metrics, metrics)
-      |> assign(:subscribed_topics, subscribed_topics)
-
-    # NOTE: The detail view updates via PubSub events:
-    # - :todos_updated events update TODOs
-    # - :llm_message events update messages
-    # - :status_changed events update status
-    # - All events are captured in the Events tab
-    # This eliminates polling and provides real-time updates (<200ms latency)
-
-    schedule_refresh()
-
-    {:noreply, socket}
-  end
-
   # Handle agent status change events (for detail view)
   def handle_info({:agent, {:status_changed, new_status, _data}}, socket) do
     if socket.assigns.view_mode == :detail && socket.assigns.agent_metadata do
@@ -251,7 +257,59 @@ defmodule SagentsLiveDebugger.AgentListLive do
     end
   end
 
-  # Handle presence_diff events for real-time viewer count updates
+  # Handle presence_diff events for agent presence topic (agent discovery)
+  # This is the primary mechanism for updating the agent list - no polling needed
+  def handle_info(
+        %Phoenix.Socket.Broadcast{event: "presence_diff", topic: @agent_presence_topic, payload: payload},
+        socket
+      ) do
+    joins = Map.get(payload, :joins, %{})
+    leaves = Map.get(payload, :leaves, %{})
+
+    if map_size(joins) > 0 || map_size(leaves) > 0 do
+      # Categorize presence changes into joined/left/updated
+      # Updates (metadata changes) don't affect follow state - only true joins/leaves do
+      %{joined: joined, left: left, updated: updated} = categorize_presence_changes(joins, leaves)
+
+      # Log for debugging
+      for {agent_id, _} <- joined, do: Logger.debug("[Presence] #{agent_id} JOINED")
+      for {agent_id, _} <- left, do: Logger.debug("[Presence] #{agent_id} LEFT")
+      for {agent_id, _} <- updated, do: Logger.debug("[Presence] #{agent_id} UPDATED (metadata change)")
+
+      # Rebuild agent list from current presence state (includes all changes)
+      agents = build_agents_from_presence(socket.assigns.presence_module, socket.assigns.coordinator)
+      metrics = Metrics.calculate_metrics(agents)
+
+      # Subscribe to any new conversation agents (for viewer counts)
+      subscribed_topics =
+        if socket.assigns.presence_module do
+          pubsub_name = socket.assigns.coordinator.pubsub_name()
+
+          subscribe_to_new_conversation_agents(
+            pubsub_name,
+            agents,
+            socket.assigns.subscribed_topics
+          )
+        else
+          socket.assigns.subscribed_topics
+        end
+
+      socket =
+        socket
+        |> assign(:agents, agents)
+        |> assign(:metrics, metrics)
+        |> assign(:subscribed_topics, subscribed_topics)
+        |> handle_agents_joined(joined)
+        |> handle_agents_left(left)
+      # Note: updates don't need handling - agent list is rebuilt, follow state unchanged
+
+      {:noreply, socket}
+    else
+      {:noreply, socket}
+    end
+  end
+
+  # Handle presence_diff events for real-time viewer count updates (conversation topics)
   def handle_info(
         %Phoenix.Socket.Broadcast{event: "presence_diff", topic: topic, payload: _payload},
         socket
@@ -296,13 +354,17 @@ defmodule SagentsLiveDebugger.AgentListLive do
   # Handle todos_updated events
   def handle_info({:agent, {:todos_updated, todos}}, socket) do
     socket =
-      if socket.assigns.view_mode == :detail && socket.assigns.agent_state do
-        # Update the agent state with new todos
-        updated_state = %{socket.assigns.agent_state | todos: todos}
+      if socket.assigns.followed_agent_id != nil do
+        # Update agent state if in detail view with state loaded
+        socket =
+          if socket.assigns.view_mode == :detail && socket.assigns.agent_state do
+            updated_state = %{socket.assigns.agent_state | todos: todos}
+            assign(socket, :agent_state, updated_state)
+          else
+            socket
+          end
 
-        socket
-        |> assign(:agent_state, updated_state)
-        |> add_event_to_stream({:todos_updated, todos}, :std)
+        add_event_to_stream(socket, {:todos_updated, todos}, :std)
       else
         socket
       end
@@ -312,16 +374,24 @@ defmodule SagentsLiveDebugger.AgentListLive do
 
   # Handle llm_message events
   def handle_info({:agent, {:llm_message, message}}, socket) do
-    socket =
-      if socket.assigns.view_mode == :detail && socket.assigns.agent_state do
-        # Append message to state
-        updated_messages = socket.assigns.agent_state.messages ++ [message]
-        updated_state = %{socket.assigns.agent_state | messages: updated_messages}
+    Logger.debug("[Event] llm_message received, followed_agent_id=#{inspect(socket.assigns.followed_agent_id)}, view_mode=#{socket.assigns.view_mode}, event_stream_size=#{length(socket.assigns[:event_stream] || [])}")
 
-        socket
-        |> assign(:agent_state, updated_state)
-        |> add_event_to_stream({:llm_message, message}, :std)
+    socket =
+      if socket.assigns.followed_agent_id != nil do
+        Logger.debug("[Event] Adding llm_message to event stream")
+        # Update agent state if in detail view with state loaded
+        socket =
+          if socket.assigns.view_mode == :detail && socket.assigns.agent_state do
+            updated_messages = socket.assigns.agent_state.messages ++ [message]
+            updated_state = %{socket.assigns.agent_state | messages: updated_messages}
+            assign(socket, :agent_state, updated_state)
+          else
+            socket
+          end
+
+        add_event_to_stream(socket, {:llm_message, message}, :std)
       else
+        Logger.debug("[Event] Ignoring llm_message - no followed_agent_id")
         socket
       end
 
@@ -331,7 +401,7 @@ defmodule SagentsLiveDebugger.AgentListLive do
   # Handle llm_deltas events (streaming tokens)
   def handle_info({:agent, {:llm_deltas, deltas}}, socket) do
     socket =
-      if socket.assigns.view_mode == :detail do
+      if socket.assigns.followed_agent_id != nil do
         add_event_to_stream(socket, {:llm_deltas, deltas}, :std)
       else
         socket
@@ -343,7 +413,7 @@ defmodule SagentsLiveDebugger.AgentListLive do
   # Handle llm_token_usage events
   def handle_info({:agent, {:llm_token_usage, usage}}, socket) do
     socket =
-      if socket.assigns.view_mode == :detail do
+      if socket.assigns.followed_agent_id != nil do
         add_event_to_stream(socket, {:llm_token_usage, usage}, :std)
       else
         socket
@@ -355,7 +425,7 @@ defmodule SagentsLiveDebugger.AgentListLive do
   # Handle conversation_title_generated events
   def handle_info({:agent, {:conversation_title_generated, title, agent_id}}, socket) do
     socket =
-      if socket.assigns.view_mode == :detail do
+      if socket.assigns.followed_agent_id != nil do
         add_event_to_stream(socket, {:conversation_title_generated, title, agent_id}, :std)
       else
         socket
@@ -368,7 +438,7 @@ defmodule SagentsLiveDebugger.AgentListLive do
   # Debug events are wrapped with {:agent, {:debug, event}} tuple in AgentServer
   def handle_info({:agent, {:debug, event}}, socket) do
     socket =
-      if socket.assigns.view_mode == :detail do
+      if socket.assigns.followed_agent_id != nil do
         add_event_to_stream(socket, event, :debug)
       else
         socket
@@ -381,7 +451,7 @@ defmodule SagentsLiveDebugger.AgentListLive do
   # This should be the LAST handle_info clause for agent events
   def handle_info({:agent, event}, socket) when is_tuple(event) do
     socket =
-      if socket.assigns.view_mode == :detail do
+      if socket.assigns.followed_agent_id != nil do
         # Assume standard event unless it matches debug patterns
         category =
           if tuple_size(event) >= 1 && elem(event, 0) == :agent_state_update do
@@ -443,8 +513,315 @@ defmodule SagentsLiveDebugger.AgentListLive do
     {:noreply, socket}
   end
 
-  defp schedule_refresh do
-    Process.send_after(self(), :refresh, @refresh_interval)
+  # Toggle auto-follow first agent
+  def handle_event("toggle_auto_follow", _params, socket) do
+    {:noreply, assign(socket, :auto_follow_first, !socket.assigns.auto_follow_first)}
+  end
+
+  # Manually follow an agent from the list
+  def handle_event("follow_agent", %{"id" => agent_id}, socket) do
+    {:noreply, follow_agent(socket, agent_id)}
+  end
+
+  # Unfollow the currently followed agent
+  def handle_event("unfollow_agent", _params, socket) do
+    {:noreply, maybe_unfollow_agent(socket)}
+  end
+
+  ## Presence-Based Agent List Functions
+  #
+  # These functions build the agent list entirely from presence metadata,
+  # eliminating the need for polling. The agent list updates in real-time
+  # via presence_diff events.
+
+  # Build agent list directly from presence metadata
+  defp build_agents_from_presence(nil, _coordinator), do: []
+
+  defp build_agents_from_presence(presence_module, coordinator) do
+    presences = LangChain.Presence.list(presence_module, @agent_presence_topic)
+
+    presences
+    |> Enum.map(fn {agent_id, %{metas: [meta | _]}} ->
+      %{
+        agent_id: agent_id,
+        status: Map.get(meta, :status, :unknown),
+        conversation_id: Map.get(meta, :conversation_id),
+        last_activity: Map.get(meta, :last_activity_at),
+        started_at: Map.get(meta, :started_at),
+        uptime_ms: calculate_uptime_ms(Map.get(meta, :started_at)),
+        viewer_count: get_viewer_count_from_presence(coordinator, Map.get(meta, :conversation_id)),
+        node: Map.get(meta, :node),
+        # Include filter fields for production filtering
+        project_id: Map.get(meta, :project_id),
+        user_id: Map.get(meta, :user_id)
+      }
+    end)
+    |> Enum.sort_by(& &1.last_activity, {:desc, DateTime})
+  end
+
+  defp calculate_uptime_ms(nil), do: nil
+
+  defp calculate_uptime_ms(started_at) do
+    DateTime.diff(DateTime.utc_now(), started_at, :millisecond)
+  end
+
+  defp get_viewer_count_from_presence(_coordinator, nil), do: 0
+
+  defp get_viewer_count_from_presence(coordinator, conversation_id) do
+    try do
+      viewers = coordinator.list_conversation_viewers(conversation_id)
+      map_size(viewers)
+    rescue
+      _ -> 0
+    end
+  end
+
+  ## Auto-Follow Functions
+  #
+  # Auto-follow automatically subscribes to the first matching agent that appears.
+  # This eliminates the need for event buffering - the debugger captures all events
+  # from the moment of auto-follow.
+
+  # Auto-follow first existing agent on mount (if any exist and auto-follow is enabled)
+  defp maybe_auto_follow_existing_agent(socket, agents, auto_follow_enabled, debug_filters) do
+    if auto_follow_enabled && connected?(socket) && length(agents) > 0 do
+      Logger.debug("[AutoFollow] Checking existing agents on mount: #{length(agents)} agents")
+
+      # Find first matching agent from the existing agent list
+      case find_first_matching_existing_agent(agents, debug_filters) do
+        nil ->
+          Logger.debug("[AutoFollow] No matching existing agent found")
+          socket
+
+        agent_id ->
+          Logger.debug("[AutoFollow] Auto-following existing agent on mount: #{agent_id}")
+          follow_agent(socket, agent_id)
+      end
+    else
+      socket
+    end
+  end
+
+  # Find first agent matching the debug filters from agent list
+  defp find_first_matching_existing_agent(agents, :all) do
+    case agents do
+      [first | _] -> first.agent_id
+      [] -> nil
+    end
+  end
+
+  defp find_first_matching_existing_agent(_agents, :none), do: nil
+
+  defp find_first_matching_existing_agent(agents, filters) when is_list(filters) do
+    Enum.find_value(agents, fn agent ->
+      if matches_any_agent_filter?(agent, filters), do: agent.agent_id
+    end)
+  end
+
+  defp matches_any_agent_filter?(agent, filters) do
+    Enum.any?(filters, fn
+      {:conversation_id, id} -> agent.conversation_id == id
+      {:project_id, id} -> agent.project_id == id
+      {:user_id, id} -> agent.user_id == id
+      {:agent_id, id} -> agent.agent_id == id
+      _ -> false
+    end)
+  end
+
+  ## Presence Change Categorization
+  #
+  # Phoenix.Presence diffs contain `joins` and `leaves` maps, but not all changes
+  # are true joins/leaves. We need to distinguish:
+  #
+  # 1. JOINED: Agent is new (appears in joins, no phx_ref_prev, not in leaves)
+  # 2. LEFT: Agent departed (appears in leaves, not in joins)
+  # 3. UPDATED: Agent's metadata changed (presence update, not a true join/leave)
+  #
+  # Updates are detected by:
+  # - phx_ref_prev in join metadata (Phoenix.Presence.update/3 links to old entry)
+  # - Agent appears in both joins AND leaves (LangChain.Presence.update untrack+track)
+
+  # Categorizes a presence_diff payload into joined, left, and updated agents.
+  # Returns `%{joined: %{}, left: %{}, updated: %{}}` where each map contains
+  # agent_id => presence_data for agents in that category.
+  defp categorize_presence_changes(joins, leaves) do
+    # Get all agent IDs mentioned in the diff
+    all_agent_ids =
+      MapSet.new(Map.keys(joins))
+      |> MapSet.union(MapSet.new(Map.keys(leaves)))
+
+    Enum.reduce(all_agent_ids, %{joined: %{}, left: %{}, updated: %{}}, fn agent_id, acc ->
+      in_joins = Map.get(joins, agent_id)
+      in_leaves = Map.get(leaves, agent_id)
+
+      cond do
+        # Agent in joins with phx_ref_prev -> UPDATE (Phoenix.Presence.update pattern)
+        # The phx_ref_prev links this entry to the previous one it's replacing
+        in_joins && has_phx_ref_prev?(in_joins) ->
+          %{acc | updated: Map.put(acc.updated, agent_id, in_joins)}
+
+        # Agent in both joins AND leaves (without phx_ref_prev) -> UPDATE
+        # This is the LangChain.Presence.update pattern (untrack + track)
+        in_joins && in_leaves ->
+          %{acc | updated: Map.put(acc.updated, agent_id, in_joins)}
+
+        # Agent only in joins (no phx_ref_prev, not in leaves) -> TRUE JOIN
+        in_joins ->
+          %{acc | joined: Map.put(acc.joined, agent_id, in_joins)}
+
+        # Agent only in leaves (not in joins) -> TRUE LEAVE
+        in_leaves ->
+          %{acc | left: Map.put(acc.left, agent_id, in_leaves)}
+      end
+    end)
+  end
+
+  # Check if a presence entry has phx_ref_prev in any of its metas
+  # phx_ref_prev is added by Phoenix.Presence when an entry is updated (not new)
+  defp has_phx_ref_prev?(%{metas: metas}) do
+    Enum.any?(metas, fn meta -> Map.has_key?(meta, :phx_ref_prev) end)
+  end
+
+  defp has_phx_ref_prev?(_), do: false
+
+  # Handle agents that truly joined (not updates)
+  # This is where auto-follow logic lives
+  defp handle_agents_joined(socket, joined) when map_size(joined) == 0, do: socket
+
+  defp handle_agents_joined(socket, joined) do
+    if socket.assigns.auto_follow_first and is_nil(socket.assigns.followed_agent_id) do
+      case find_first_matching_agent(joined, socket.assigns.debug_filters) do
+        nil ->
+          socket
+
+        agent_id ->
+          Logger.debug("[AutoFollow] Auto-following new agent: #{agent_id}")
+          follow_agent(socket, agent_id)
+      end
+    else
+      socket
+    end
+  end
+
+  # Handle agents that truly left (not updates)
+  # Clear follow state if the followed agent departed
+  defp handle_agents_left(socket, left) do
+    followed = socket.assigns.followed_agent_id
+
+    if followed && Map.has_key?(left, followed) do
+      Logger.debug("[Presence] Followed agent #{followed} LEFT - clearing follow state")
+      socket
+      |> assign(:followed_agent_id, nil)
+      |> assign(:event_stream, [])
+      |> assign(:subagents, %{})
+    else
+      socket
+    end
+  end
+
+  # Find first agent matching the debug filters
+  defp find_first_matching_agent(joins, :all) do
+    case Map.keys(joins) do
+      [first | _] -> first
+      [] -> nil
+    end
+  end
+
+  defp find_first_matching_agent(_joins, :none), do: nil
+
+  defp find_first_matching_agent(joins, filters) when is_list(filters) do
+    Enum.find_value(joins, fn {agent_id, %{metas: [meta | _]}} ->
+      if matches_any_filter?(meta, filters), do: agent_id
+    end)
+  end
+
+  defp matches_any_filter?(meta, filters) do
+    Enum.any?(filters, fn
+      {:conversation_id, id} -> Map.get(meta, :conversation_id) == id
+      {:project_id, id} -> Map.get(meta, :project_id) == id
+      {:user_id, id} -> Map.get(meta, :user_id) == id
+      {:agent_id, id} -> Map.get(meta, :agent_id) == id
+      _ -> false
+    end)
+  end
+
+  ## Follow/Unfollow Agent Functions
+
+  defp follow_agent(socket, agent_id) do
+    # Don't re-follow if already following the same agent (preserves event_stream)
+    if socket.assigns.followed_agent_id == agent_id do
+      Logger.debug("[Follow] Already following #{agent_id}, skipping re-follow (preserving #{length(socket.assigns[:event_stream] || [])} events)")
+      socket
+    else
+      do_follow_agent(socket, agent_id)
+    end
+  end
+
+  defp do_follow_agent(socket, agent_id) do
+    Logger.debug("[Follow] Starting follow for agent: #{agent_id}")
+
+    # Unfollow previous if any
+    socket = maybe_unfollow_agent(socket)
+
+    # Subscribe to agent events
+    socket =
+      if connected?(socket) do
+        sub_result = LangChain.Agents.AgentServer.subscribe(agent_id)
+        debug_sub_result = LangChain.Agents.AgentServer.subscribe_debug(agent_id)
+        Logger.debug("[Follow] Subscription results - standard: #{inspect(sub_result)}, debug: #{inspect(debug_sub_result)}")
+
+        with :ok <- sub_result,
+             :ok <- debug_sub_result do
+          socket
+        else
+          error ->
+            Logger.debug("[Follow] Subscription failed: #{inspect(error)}")
+            socket
+        end
+      else
+        Logger.debug("[Follow] Not connected, skipping subscriptions")
+        socket
+      end
+
+    # Fetch current agent state for initial display
+    initial_state =
+      try do
+        LangChain.Agents.AgentServer.get_state(agent_id)
+      catch
+        :exit, _ -> nil
+      end
+
+    socket
+    |> assign(:followed_agent_id, agent_id)
+    |> assign(:event_stream, [])
+    |> assign(:subagents, %{})
+    |> maybe_set_initial_state(initial_state)
+  end
+
+  defp maybe_unfollow_agent(socket) do
+    case socket.assigns.followed_agent_id do
+      nil ->
+        socket
+
+      agent_id ->
+        # Unsubscribe from agent events
+        LangChain.Agents.AgentServer.unsubscribe(agent_id)
+        LangChain.Agents.AgentServer.unsubscribe_debug(agent_id)
+
+        socket
+        |> assign(:followed_agent_id, nil)
+        |> assign(:event_stream, [])
+        |> assign(:subagents, %{})
+    end
+  end
+
+  defp maybe_set_initial_state(socket, nil), do: socket
+
+  defp maybe_set_initial_state(socket, _state) do
+    # Optionally populate initial state from followed agent
+    # This allows showing current todos and messages immediately
+    # For now, just return socket - events will populate state in real-time
+    socket
   end
 
   # Subscribe to presence topics for all conversation agents
@@ -519,6 +896,37 @@ defmodule SagentsLiveDebugger.AgentListLive do
     "conversation:#{conversation_id}"
   end
 
+  # Track debugger presence for agent discovery
+  # Agents can discover debuggers via this topic
+  defp track_debugger_presence(presence_module, debugger_id) do
+    metadata = %{
+      interested_in: :all,
+      connected_at: DateTime.utc_now(),
+      node: node()
+    }
+
+    case LangChain.Presence.track(
+           presence_module,
+           @debug_viewers_topic,
+           debugger_id,
+           self(),
+           metadata
+         ) do
+      {:ok, _ref} ->
+        Logger.debug("Debugger #{debugger_id} tracked for discovery")
+        :ok
+
+      {:error, reason} ->
+        Logger.warning("Failed to track debugger presence: #{inspect(reason)}")
+        :error
+    end
+  end
+
+  # Subscribe to agent presence topic for real-time agent discovery
+  defp subscribe_to_agent_presence(pubsub_name) do
+    LangChain.PubSub.subscribe(Phoenix.PubSub, pubsub_name, @agent_presence_topic)
+  end
+
   def render(assigns) do
     ~H"""
     <!-- Hidden button for timezone submission -->
@@ -574,17 +982,37 @@ defmodule SagentsLiveDebugger.AgentListLive do
     ~H"""
     <div class="container">
       <header class="header">
-        <h1>Agent Debug Dashboard</h1>
+        <div class="header-row">
+          <h1>Agent Debug Dashboard</h1>
+          <label class="auto-follow-toggle">
+            <input
+              type="checkbox"
+              checked={@auto_follow_first}
+              phx-click="toggle_auto_follow"
+            />
+            <span>Auto-Follow First</span>
+          </label>
+        </div>
+        <%= if @followed_agent_id do %>
+          <div class="followed-indicator">
+            <button phx-click="unfollow_agent" class="btn btn-following-toggle" title="Click to unfollow">
+              🕵️ Following
+            </button>
+            <.link patch={"?agent_id=#{@followed_agent_id}"} class="followed-agent-link">
+              {@followed_agent_id}
+            </.link>
+          </div>
+        <% end %>
       </header>
-      
+
     <!-- System Overview Panel -->
       <.system_overview metrics={@metrics} />
-      
+
     <!-- Filters -->
       <.filter_controls form={@form} />
-      
+
     <!-- Active Agent List -->
-      <.agent_table agents={@filtered_agents} />
+      <.agent_table agents={@filtered_agents} followed_agent_id={@followed_agent_id} />
     </div>
     """
   end
@@ -780,7 +1208,7 @@ defmodule SagentsLiveDebugger.AgentListLive do
         </thead>
         <tbody>
           <%= for agent <- @agents do %>
-            <.agent_row agent={agent} />
+            <.agent_row agent={agent} followed_agent_id={@followed_agent_id} />
           <% end %>
         </tbody>
       </table>
@@ -796,14 +1224,20 @@ defmodule SagentsLiveDebugger.AgentListLive do
 
   # Component: Single Agent Row
   defp agent_row(assigns) do
+    is_followed = assigns.followed_agent_id == assigns.agent.agent_id
+    assigns = assign(assigns, :is_followed, is_followed)
+
     ~H"""
-    <tr>
+    <tr class={if @is_followed, do: "followed-row", else: ""}>
       <td>
         <div class="conv-id">
           <span class="conv-id-icon">
             {status_emoji(@agent.status)}
           </span>
           <span>{@agent.agent_id}</span>
+          <%= if @is_followed do %>
+            <span class="followed-badge" title="Following">🕵️</span>
+          <% end %>
         </div>
         <%= if @agent.conversation_id do %>
           <div class="agent-id">
@@ -821,30 +1255,39 @@ defmodule SagentsLiveDebugger.AgentListLive do
       </td>
       <td>
         <span class="viewer-count">
-          👁️ {@agent.viewer_count}
+          {@agent.viewer_count}
         </span>
       </td>
       <td class="text-gray">
         <%= if @agent.last_activity do %>
           {format_time_ago(@agent.last_activity)}
         <% else %>
-          <span class="text-muted">—</span>
+          <span class="text-muted">-</span>
         <% end %>
       </td>
       <td class="text-gray">
         <%= if @agent.uptime_ms do %>
           {format_duration(@agent.uptime_ms)}
         <% else %>
-          <span class="text-muted">—</span>
+          <span class="text-muted">-</span>
         <% end %>
       </td>
-      <td>
+      <td class="actions-cell">
         <.link
           patch={"?agent_id=#{@agent.agent_id}"}
           class="btn btn-view"
         >
           View
         </.link>
+        <%= if @is_followed do %>
+          <button phx-click="unfollow_agent" class="btn btn-unfollow">
+            Unfollow
+          </button>
+        <% else %>
+          <button phx-click="follow_agent" phx-value-id={@agent.agent_id} class="btn btn-follow">
+            Follow
+          </button>
+        <% end %>
       </td>
     </tr>
     """
@@ -1203,7 +1646,7 @@ defmodule SagentsLiveDebugger.AgentListLive do
           </div>
         </div>
       <% end %>
-      
+
     <!-- Base System Prompt -->
       <%= if @agent.base_system_prompt && @agent.base_system_prompt != "" do %>
         <div class="system-message-section">

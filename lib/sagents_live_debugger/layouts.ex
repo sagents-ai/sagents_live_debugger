@@ -1326,6 +1326,133 @@ defmodule SagentsLiveDebugger.Layouts do
     .todo-active-form em {
       color: #4b5563;
     }
+
+    /* Auto-Follow Header Styles */
+    .header {
+      flex-direction: column;
+      align-items: flex-start;
+      gap: 0.75rem;
+    }
+
+    .header-row {
+      display: flex;
+      width: 100%;
+      justify-content: space-between;
+      align-items: center;
+    }
+
+    .auto-follow-toggle {
+      display: flex;
+      align-items: center;
+      gap: 0.5rem;
+      cursor: pointer;
+      font-size: 0.875rem;
+      color: #6b7280;
+    }
+
+    .auto-follow-toggle input[type="checkbox"] {
+      cursor: pointer;
+    }
+
+    .followed-indicator {
+      display: flex;
+      align-items: center;
+      gap: 0.75rem;
+      padding: 0.5rem 1rem;
+      background: #fef3c7;
+      border: 1px solid #fcd34d;
+      border-radius: 0.5rem;
+    }
+
+    .btn-following-toggle {
+      display: inline-flex;
+      align-items: center;
+      gap: 0.375rem;
+      padding: 0.375rem 0.75rem;
+      background: #10b981;
+      color: white;
+      border: none;
+      border-radius: 0.375rem;
+      font-size: 0.875rem;
+      font-weight: 500;
+      cursor: pointer;
+      transition: background 0.2s;
+    }
+
+    .btn-following-toggle:hover {
+      background: #dc2626;
+    }
+
+    .followed-agent-link {
+      color: #4f46e5;
+      font-weight: 600;
+      font-family: 'Courier New', monospace;
+      font-size: 0.875rem;
+      text-decoration: none;
+      padding: 0.25rem 0.5rem;
+      background: white;
+      border-radius: 0.25rem;
+      border: 1px solid #e5e7eb;
+      transition: all 0.2s;
+    }
+
+    .followed-agent-link:hover {
+      color: #3730a3;
+      background: #eef2ff;
+      border-color: #a5b4fc;
+      text-decoration: underline;
+    }
+
+    .followed-badge {
+      font-size: 1rem;
+      margin-left: 0.25rem;
+    }
+
+    .followed-row {
+      background: #fefce8 !important;
+    }
+
+    .followed-row:hover {
+      background: #fef9c3 !important;
+    }
+
+    /* Follow/Unfollow buttons in table */
+    .btn-follow {
+      padding: 0.375rem 0.75rem;
+      background: #6366f1;
+      color: white;
+      border: none;
+      border-radius: 0.375rem;
+      font-size: 0.875rem;
+      font-weight: 500;
+      cursor: pointer;
+      transition: background 0.2s;
+    }
+
+    .btn-follow:hover {
+      background: #4f46e5;
+    }
+
+    .btn-unfollow {
+      padding: 0.375rem 0.75rem;
+      background: #ef4444;
+      color: white;
+      border: none;
+      border-radius: 0.375rem;
+      font-size: 0.875rem;
+      font-weight: 500;
+      cursor: pointer;
+      transition: background 0.2s;
+    }
+
+    .btn-unfollow:hover {
+      background: #dc2626;
+    }
+
+    .actions-cell {
+      display: flex;
+      gap: 0.5rem;
+    }
     """
   end
 end
