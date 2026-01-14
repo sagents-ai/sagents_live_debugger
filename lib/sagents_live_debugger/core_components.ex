@@ -472,9 +472,10 @@ defmodule SagentsLiveDebugger.CoreComponents do
   end
 
   defp highlight_with_autumn(code, language) when is_binary(code) do
+    # Themes: dracula, onedark, material_oceanic
     Autumn.highlight!(code,
       language: language,
-      formatter: {:html_inline, theme: "dracula"}
+      formatter: {:html_inline, theme: "material_oceanic"}
     )
   rescue
     _ ->
