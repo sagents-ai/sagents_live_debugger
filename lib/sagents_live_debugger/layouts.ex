@@ -1921,6 +1921,25 @@ defmodule SagentsLiveDebugger.Layouts do
       background: #d1fae5;
       color: #065f46;
     }
+
+    /* Syntax highlighted code blocks */
+    .highlighted-code {
+      margin: 0;
+      border-radius: 0.25rem;
+      overflow-x: auto;
+    }
+
+    .highlighted-code pre {
+      margin: 0;
+      font-size: 0.875rem;
+      line-height: 1.5;
+      padding: 0.75rem;
+      border-radius: 0.25rem;
+    }
+
+    .highlighted-code code {
+      font-family: 'Courier New', Consolas, Monaco, monospace;
+    }
     """
   end
 end

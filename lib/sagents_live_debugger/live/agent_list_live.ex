@@ -1852,13 +1852,13 @@ defmodule SagentsLiveDebugger.AgentListLive do
           <%= if Map.has_key?(@event_data.event, :merged_delta) && @event_data.event.merged_delta do %>
             <div class="event-field">
               <span class="event-label">Merged Delta:</span>
-              <pre class="event-raw"><%= inspect(@event_data.event.merged_delta, pretty: true, limit: :infinity) %></pre>
+              <.highlight_code code={inspect_for_display(@event_data.event.merged_delta)} />
             </div>
           <% end %>
 
           <div class="event-field">
             <span class="event-label">Raw Event:</span>
-            <pre class="event-raw"><%= @event_data.raw_event %></pre>
+            <.highlight_code code={@event_data.raw_event} />
           </div>
         </div>
       </div>

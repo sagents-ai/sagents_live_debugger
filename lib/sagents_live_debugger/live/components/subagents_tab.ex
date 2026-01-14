@@ -15,6 +15,7 @@ defmodule SagentsLiveDebugger.Live.Components.SubagentsTab do
 
   use Phoenix.Component
   import SagentsLiveDebugger.Live.Components.MessageComponents
+  import SagentsLiveDebugger.CoreComponents, only: [highlight_code: 1]
 
   @doc """
   Renders the sub-agents view container.
@@ -188,21 +189,21 @@ defmodule SagentsLiveDebugger.Live.Components.SubagentsTab do
       <%= if @subagent.instructions do %>
         <div class="subagent-config-item">
           <label>Instructions:</label>
-          <pre><%= @subagent.instructions %></pre>
+          <.highlight_code code={@subagent.instructions} />
         </div>
       <% end %>
 
       <%= if @subagent.result do %>
         <div class="subagent-config-item">
           <label>Result:</label>
-          <pre><%= format_result(@subagent.result) %></pre>
+          <.highlight_code code={format_result(@subagent.result)} />
         </div>
       <% end %>
 
       <%= if @subagent.error do %>
         <div class="subagent-config-item">
           <label class="subagent-error-label">Error:</label>
-          <pre class="subagent-error-content"><%= inspect(@subagent.error, pretty: true, limit: 500) %></pre>
+          <.highlight_code code={inspect_for_display(@subagent.error)} />
         </div>
       <% end %>
     </div>
@@ -229,7 +230,7 @@ defmodule SagentsLiveDebugger.Live.Components.SubagentsTab do
           </span>
           Streaming...
         </div>
-        <pre class="subagent-streaming-content"><%= @subagent.streaming_content %></pre>
+        <.highlight_code code={@subagent.streaming_content} />
       <% end %>
 
       <%= if @subagent.messages == [] and @subagent.streaming_content == "" do %>

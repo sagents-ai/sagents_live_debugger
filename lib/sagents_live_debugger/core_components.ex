@@ -448,6 +448,95 @@ defmodule SagentsLiveDebugger.CoreComponents do
   end
 
   @doc """
+  Renders syntax-highlighted code using Autumn.
+
+  ## Attributes
+    * `:code` - The code string to highlight (required)
+    * `:language` - The language for highlighting (default: "elixir")
+
+  ## Examples
+
+      <.highlight_code code={inspect(@data, pretty: true)} />
+      <.highlight_code code={@json_string} language="json" />
+  """
+  attr :code, :string, required: true
+  attr :language, :string, default: "elixir"
+
+  def highlight_code(assigns) do
+    highlighted = highlight_with_autumn(assigns.code, assigns.language)
+    assigns = assign(assigns, :highlighted, highlighted)
+
+    ~H"""
+    <div class="highlighted-code" phx-no-format>{Phoenix.HTML.raw(@highlighted)}</div>
+    """
+  end
+
+  defp highlight_with_autumn(code, language) when is_binary(code) do
+    Autumn.highlight!(code,
+      language: language,
+      formatter: {:html_inline, theme: "dracula"}
+    )
+  rescue
+    _ ->
+      # Fallback to plain pre on error - escape HTML entities manually
+      escaped = code |> escape_html()
+      "<pre>#{escaped}</pre>"
+  end
+
+  defp highlight_with_autumn(code, _language) do
+    escaped = code |> inspect(limit: :infinity) |> escape_html()
+    "<pre>#{escaped}</pre>"
+  end
+
+  defp escape_html(text) do
+    text
+    |> String.replace("&", "&amp;")
+    |> String.replace("<", "&lt;")
+    |> String.replace(">", "&gt;")
+    |> String.replace("\"", "&quot;")
+    |> String.replace("'", "&#39;")
+  end
+
+  defp mdex_config(document) do
+    [
+      document: document,
+      extension: [
+        strikethrough: true,
+        # This is a security risk. But it enables the mermaid extension that
+        # embeds a script tag.
+        tagfilter: false,
+        table: true,
+        autolink: true,
+        tasklist: true,
+        footnotes: true,
+        shortcodes: true
+      ],
+      parse: [
+        smart: true,
+        relaxed_tasklist_matching: true,
+        relaxed_autolinks: true
+      ],
+      render: [
+        unsafe_: true
+      ]
+      # syntax_highlight: [formatter: {:html_inline, theme: "github_light"}]
+    ]
+  end
+
+  @doc """
+  Render the raw content as markdown. Returns HTML rendered text.
+  """
+  def render_markdown(nil), do: Phoenix.HTML.raw(nil)
+
+  def render_markdown(text) when is_binary(text) do
+    # NOTE: This allows explicit HTML to come through.
+    #   - Don't allow this with user input.
+    MDEx.new()
+    |> MDEx.to_html!(mdex_config(text))
+    |> Phoenix.HTML.raw()
+  end
+
+  @doc """
   Translates an error message using gettext.
   """
   def translate_error({msg, opts}) do

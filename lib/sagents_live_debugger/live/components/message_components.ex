@@ -8,6 +8,8 @@ defmodule SagentsLiveDebugger.Live.Components.MessageComponents do
 
   use Phoenix.Component
 
+  import SagentsLiveDebugger.CoreComponents, only: [highlight_code: 1]
+
   @doc """
   Renders a single message item with role emoji, content, tool calls/results, and metadata.
   """
@@ -54,7 +56,7 @@ defmodule SagentsLiveDebugger.Live.Components.MessageComponents do
       <%= if @message.metadata && map_size(@message.metadata) > 0 do %>
         <details class="message-metadata">
           <summary>Metadata</summary>
-          <pre phx-no-format><%= inspect(@message.metadata, pretty: true, limit: :infinity) %></pre>
+          <.highlight_code code={inspect_for_display(@message.metadata)} />
         </details>
       <% end %>
     </div>
@@ -83,7 +85,7 @@ defmodule SagentsLiveDebugger.Live.Components.MessageComponents do
         """
 
       true ->
-        assigns = %{content: inspect(message.content, limit: :infinity)}
+        assigns = %{content: inspect_for_display(message.content)}
 
         ~H"""
         <div class="formatted-content" phx-no-format><%= @content %></div>
@@ -138,19 +140,21 @@ defmodule SagentsLiveDebugger.Live.Components.MessageComponents do
         """
 
       is_map(part) && Map.get(part, :type) == :image ->
-        assigns = %{part: part}
+        assigns = %{part: part, inspected: inspect_for_display(part)}
 
         ~H"""
-        <div class="content-part-image" phx-no-format>
-          [Image: <%= inspect(@part, limit: :infinity) %>]
+        <div class="content-part-image">
+          [Image: <.highlight_code code={@inspected} />]
         </div>
         """
 
       true ->
-        assigns = %{part: part}
+        assigns = %{inspected: inspect_for_display(part)}
 
         ~H"""
-        <div class="content-part-unknown" phx-no-format><%= inspect(@part, limit: :infinity) %></div>
+        <div class="content-part-unknown">
+          <.highlight_code code={@inspected} />
+        </div>
         """
     end
   end
@@ -172,7 +176,7 @@ defmodule SagentsLiveDebugger.Live.Components.MessageComponents do
       <%= if @tool_call.arguments do %>
         <div class="tool-arguments">
           <strong>Arguments:</strong>
-          <pre phx-no-format><%= format_tool_arguments(@tool_call.arguments) %></pre>
+          <.highlight_code code={format_tool_arguments(@tool_call.arguments)} language="json" />
         </div>
       <% end %>
     </div>
@@ -199,11 +203,21 @@ defmodule SagentsLiveDebugger.Live.Components.MessageComponents do
         <% end %>
       </div>
       <div class="tool-result-content">
-        <pre phx-no-format><%= format_tool_result(@tool_result.content) %></pre>
+        <.highlight_code code={format_tool_result(@tool_result.content)} language={detect_result_language(@tool_result.content)} />
       </div>
     </div>
     """
   end
+
+  defp detect_result_language(content) when is_binary(content) do
+    if String.match?(content, ~r/^\s*[\{\[]/) do
+      "json"
+    else
+      "elixir"
+    end
+  end
+
+  defp detect_result_language(_), do: "elixir"
 
   @doc """
   Renders a tool item with expandable description and parameters.
@@ -406,7 +420,7 @@ defmodule SagentsLiveDebugger.Live.Components.MessageComponents do
         <span class="toggle-icon collapsed" id={@toggle_id}></span>
       </div>
       <div class="middleware-model-content" id={@model_id} style="display: none;">
-        <pre class="config-value" phx-no-format><%= inspect(@model, pretty: true, limit: :infinity) %></pre>
+        <.highlight_code code={inspect_for_display(@model)} />
       </div>
     </div>
     """
@@ -419,18 +433,32 @@ defmodule SagentsLiveDebugger.Live.Components.MessageComponents do
   attr :value, :any, required: true
 
   def middleware_config_entry(assigns) do
+    # Pre-compute the formatted value to ensure limit: :infinity is respected
+    formatted_value =
+      if is_binary(assigns.value) do
+        assigns.value
+      else
+        inspect_for_display(assigns.value)
+      end
+
+    assigns = assign(assigns, :formatted_value, formatted_value)
+
     ~H"""
     <div class="config-entry">
       <div class="config-label">{format_config_key(@key)}</div>
-      <pre
-        class={"config-value #{if is_binary(@value), do: "config-value-text", else: ""}"}
-        phx-no-format
-      ><%= format_config_value(@value) %></pre>
+      <.highlight_code code={@formatted_value} />
     </div>
     """
   end
 
   # Helper functions - public so they can be used by importers
+
+  @doc """
+  Inspect values for debug display.
+  """
+  def inspect_for_display(value) do
+    inspect(value, pretty: true, limit: :infinity, printable_limit: :infinity)
+  end
 
   def message_role_emoji(:system), do: "⚙️"
   def message_role_emoji(:user), do: "👤"
@@ -441,7 +469,7 @@ defmodule SagentsLiveDebugger.Live.Components.MessageComponents do
   def format_tool_arguments(arguments) when is_map(arguments) do
     Jason.encode!(arguments, pretty: true)
   rescue
-    _ -> inspect(arguments, limit: :infinity)
+    _ -> inspect_for_display(arguments)
   end
 
   def format_tool_arguments(arguments) when is_binary(arguments) do
@@ -453,7 +481,8 @@ defmodule SagentsLiveDebugger.Live.Components.MessageComponents do
     _ -> arguments
   end
 
-  def format_tool_arguments(arguments), do: inspect(arguments, limit: :infinity)
+  def format_tool_arguments(arguments),
+    do: inspect_for_display(arguments)
 
   def format_tool_result(content) when is_binary(content) do
     case Jason.decode(content) do
@@ -464,7 +493,8 @@ defmodule SagentsLiveDebugger.Live.Components.MessageComponents do
     _ -> content
   end
 
-  def format_tool_result(content), do: inspect(content, pretty: true, limit: :infinity)
+  def format_tool_result(content),
+    do: inspect_for_display(content)
 
   # Middleware helper functions
 
@@ -476,7 +506,8 @@ defmodule SagentsLiveDebugger.Live.Components.MessageComponents do
     |> List.last()
   end
 
-  def format_module_name(module), do: inspect(module, limit: :infinity)
+  def format_module_name(module),
+    do: inspect(module)
 
   def get_model_name(model) when is_map(model) do
     Map.get(model, :model) || Map.get(model, :__struct__) |> format_module_name()
@@ -488,5 +519,7 @@ defmodule SagentsLiveDebugger.Live.Components.MessageComponents do
   def format_config_key(key), do: inspect(key)
 
   def format_config_value(value) when is_binary(value), do: value
-  def format_config_value(value), do: inspect(value, pretty: true, limit: :infinity)
+
+  def format_config_value(value),
+    do: inspect_for_display(value)
 end
