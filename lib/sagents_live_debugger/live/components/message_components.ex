@@ -441,14 +441,35 @@ defmodule SagentsLiveDebugger.Live.Components.MessageComponents do
         inspect_for_display(assigns.value)
       end
 
-    assigns = assign(assigns, :formatted_value, formatted_value)
+    # Detect if key contains "prompt" for markdown highlighting
+    language = detect_config_language(assigns.key)
+
+    assigns =
+      assigns
+      |> assign(:formatted_value, formatted_value)
+      |> assign(:language, language)
 
     ~H"""
     <div class="config-entry">
       <div class="config-label">{format_config_key(@key)}</div>
-      <.highlight_code code={@formatted_value} />
+      <.highlight_code code={@formatted_value} language={@language} />
     </div>
     """
+  end
+
+  defp detect_config_language(key) do
+    key_string =
+      case key do
+        k when is_atom(k) -> Atom.to_string(k)
+        k when is_binary(k) -> k
+        k -> inspect(k)
+      end
+
+    if String.contains?(key_string, "prompt") do
+      "markdown"
+    else
+      "elixir"
+    end
   end
 
   # Helper functions - public so they can be used by importers

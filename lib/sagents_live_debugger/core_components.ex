@@ -538,6 +538,32 @@ defmodule SagentsLiveDebugger.CoreComponents do
   end
 
   @doc """
+  Renders markdown content in a styled container.
+
+  ## Attributes
+    * `:text` - The markdown text to render (required)
+    * `:class` - Additional CSS classes to apply
+
+  ## Examples
+
+      <.markdown text={@instructions} />
+      <.markdown text={@description} class="custom-class" />
+  """
+  attr :text, :string, required: true
+  attr :class, :string, default: nil
+  attr :rest, :global
+
+  def markdown(%{text: nil} = assigns), do: ~H""
+
+  def markdown(assigns) do
+    ~H"""
+    <div class={["markdown-content", @class]} {@rest}>
+      {render_markdown(@text)}
+    </div>
+    """
+  end
+
+  @doc """
   Translates an error message using gettext.
   """
   def translate_error({msg, opts}) do

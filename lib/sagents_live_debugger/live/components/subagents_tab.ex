@@ -189,14 +189,14 @@ defmodule SagentsLiveDebugger.Live.Components.SubagentsTab do
       <%= if @subagent.instructions do %>
         <div class="subagent-config-item">
           <label>Instructions:</label>
-          <.highlight_code code={@subagent.instructions} />
+          <.highlight_code code={format_result(@subagent.instructions)} language="markdown" />
         </div>
       <% end %>
 
       <%= if @subagent.result do %>
         <div class="subagent-config-item">
           <label>Result:</label>
-          <.highlight_code code={format_result(@subagent.result)} />
+          <.highlight_code code={format_result(@subagent.result)} language="markdown" />
         </div>
       <% end %>
 

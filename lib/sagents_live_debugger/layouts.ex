@@ -1626,7 +1626,7 @@ defmodule SagentsLiveDebugger.Layouts do
       margin-bottom: 0.25rem;
     }
 
-    .subagent-config-item code {
+    .subagent-config-item > code {
       display: block;
       font-size: 0.875rem;
       background: #f3f4f6;
@@ -1636,11 +1636,12 @@ defmodule SagentsLiveDebugger.Layouts do
       font-family: 'Courier New', monospace;
     }
 
-    .subagent-config-item span {
+    .subagent-config-item > span {
       font-size: 0.875rem;
     }
 
-    .subagent-config-item pre {
+    /* Direct pre children get light background, but not highlighted-code descendants */
+    .subagent-config-item > pre {
       margin: 0;
       font-size: 0.875rem;
       background: #f3f4f6;
@@ -1650,6 +1651,12 @@ defmodule SagentsLiveDebugger.Layouts do
       max-height: 12rem;
       overflow-y: auto;
       white-space: pre-wrap;
+    }
+
+    /* Highlighted code blocks within config items preserve their dark theme */
+    .subagent-config-item .highlighted-code {
+      max-height: 12rem;
+      overflow-y: auto;
     }
 
     .subagent-error-label {
@@ -1935,6 +1942,9 @@ defmodule SagentsLiveDebugger.Layouts do
       line-height: 1.5;
       padding: 0.75rem;
       border-radius: 0.25rem;
+      white-space: pre-wrap;
+      word-wrap: break-word;
+      overflow-wrap: break-word;
     }
 
     .highlighted-code code {
