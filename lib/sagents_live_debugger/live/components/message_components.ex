@@ -84,6 +84,10 @@ defmodule SagentsLiveDebugger.Live.Components.MessageComponents do
         </div>
         """
 
+      is_nil(message.content) ->
+        assigns = %{}
+        ~H""
+
       true ->
         assigns = %{content: inspect_for_display(message.content)}
 
