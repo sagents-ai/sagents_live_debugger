@@ -2503,11 +2503,12 @@ defmodule SagentsLiveDebugger.AgentListLive do
           subagents
 
         existing ->
+          # Note: Messages are received in real-time via {:subagent_llm_message, ...}
+          # events, so we preserve the accumulated messages rather than replacing them.
           updated = %{
             existing
             | status: :completed,
               result: data.result,
-              messages: data.messages || existing.messages,
               duration_ms: data.duration_ms,
               streaming_content: "",
               token_usage: data[:token_usage]
