@@ -2434,17 +2434,23 @@ defmodule SagentsLiveDebugger.AgentListLive do
 
   # Handle sub-agent events and update the subagents state
   defp handle_subagent_event(socket, sub_agent_id, {:subagent_started, data}) do
+    initial_messages = data[:initial_messages] || []
+
+    # Extract system prompt and instructions from initial messages for display
+    {system_prompt, instructions} = extract_subagent_prompts(initial_messages)
+
     subagent_entry = %{
       id: sub_agent_id,
       parent_id: data.parent_id,
       name: data.name || "general-purpose",
-      instructions: data.instructions,
+      instructions: instructions,
+      system_prompt: system_prompt,
       tools: data.tools || [],
       middleware: data[:middleware] || [],
       model: data.model,
       status: :starting,
       started_at: DateTime.utc_now(),
-      messages: [],
+      messages: initial_messages,
       streaming_content: "",
       result: nil,
       duration_ms: nil,
@@ -2535,4 +2541,43 @@ defmodule SagentsLiveDebugger.AgentListLive do
       end
     end)
   end
+
+  # Extract system prompt and instructions from subagent's initial messages
+  # System prompt is the first :system message, instructions is the last :user message
+  defp extract_subagent_prompts(messages) when is_list(messages) do
+    system_prompt =
+      case Enum.find(messages, &(&1.role == :system)) do
+        nil -> nil
+        msg -> content_to_string(msg.content)
+      end
+
+    # Instructions are the last user message (the task given to the sub-agent)
+    instructions =
+      messages
+      |> Enum.filter(&(&1.role == :user))
+      |> List.last()
+      |> case do
+        nil -> nil
+        msg -> content_to_string(msg.content)
+      end
+
+    {system_prompt, instructions}
+  end
+
+  defp extract_subagent_prompts(_), do: {nil, nil}
+
+  # Convert message content to string, handling both string and ContentPart list formats
+  defp content_to_string(content) when is_binary(content), do: content
+
+  defp content_to_string(parts) when is_list(parts) do
+    parts
+    |> Enum.filter(&(Map.get(&1, :type) == :text))
+    |> Enum.map_join("\n", &Map.get(&1, :content, ""))
+    |> case do
+      "" -> nil
+      text -> text
+    end
+  end
+
+  defp content_to_string(_), do: nil
 end
