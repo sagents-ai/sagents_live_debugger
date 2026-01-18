@@ -370,19 +370,12 @@ defmodule SagentsLiveDebugger.AgentListLive do
   end
 
   # Handle llm_message events
+  # These are for the event stream display only. Authoritative state updates come from:
+  # - :after_middleware_state (post-middleware state before LLM call)
+  # - :agent_state_update (final state after execution completes)
   def handle_info({:agent, {:llm_message, message}}, socket) do
     socket =
       if socket.assigns.followed_agent_id != nil do
-        # Update agent state if in detail view with state loaded
-        socket =
-          if socket.assigns.view_mode == :detail && socket.assigns.agent_state do
-            updated_messages = socket.assigns.agent_state.messages ++ [message]
-            updated_state = %{socket.assigns.agent_state | messages: updated_messages}
-            assign(socket, :agent_state, updated_state)
-          else
-            socket
-          end
-
         add_event_to_stream(socket, {:llm_message, message}, :std)
       else
         socket
@@ -435,6 +428,53 @@ defmodule SagentsLiveDebugger.AgentListLive do
         socket
         |> handle_subagent_event(sub_agent_id, event)
         |> add_event_to_stream({:subagent, sub_agent_id, event}, :debug)
+      else
+        socket
+      end
+
+    {:noreply, socket}
+  end
+
+  # Handle post-middleware state debug events
+  # This is the authoritative state after middleware has processed it (e.g., with <current_timestamp>)
+  def handle_info({:agent, {:debug, {:after_middleware_state, prepared_state}}}, socket) do
+    socket =
+      if socket.assigns.followed_agent_id != nil do
+        # ALWAYS update agent_state regardless of view mode.
+        # This ensures when user switches to detail view, the state is already current.
+        # The prepared_state contains middleware modifications (e.g., timestamps).
+        socket
+        |> assign(:agent_state, prepared_state)
+        |> add_event_to_stream({:after_middleware_state, prepared_state}, :debug)
+      else
+        socket
+      end
+
+    {:noreply, socket}
+  end
+
+  # Handle agent_state_update debug events (after execution completes)
+  # This is the authoritative final state after the agent execution finishes
+  def handle_info({:agent, {:debug, {:agent_state_update, new_state}}}, socket) do
+    socket =
+      if socket.assigns.followed_agent_id != nil do
+        socket
+        |> assign(:agent_state, new_state)
+        |> add_event_to_stream({:agent_state_update, new_state}, :debug)
+      else
+        socket
+      end
+
+    {:noreply, socket}
+  end
+
+  # Handle agent_state_update with middleware_id (middleware state updates)
+  def handle_info({:agent, {:debug, {:agent_state_update, middleware_id, new_state}}}, socket) do
+    socket =
+      if socket.assigns.followed_agent_id != nil do
+        socket
+        |> assign(:agent_state, new_state)
+        |> add_event_to_stream({:agent_state_update, middleware_id, new_state}, :debug)
       else
         socket
       end
@@ -860,18 +900,26 @@ defmodule SagentsLiveDebugger.AgentListLive do
         {:error, _} -> nil
       end
 
-    # get_state returns State.t() directly, not a tuple
-    state =
-      try do
-        LangChain.Agents.AgentServer.get_state(agent_id)
-      catch
-        :exit, _ -> nil
-      end
-
     agent =
       case LangChain.Agents.AgentServer.get_agent(agent_id) do
         {:ok, agent} -> agent
         {:error, _} -> nil
+      end
+
+    # Only fetch state from server if we don't already have state for this agent.
+    # If we're already following this agent, we may have received live state updates
+    # (e.g., :after_middleware_state) that are more current than the server's stored state.
+    state =
+      if socket.assigns.followed_agent_id == agent_id && socket.assigns[:agent_state] != nil do
+        # Keep existing state from live events
+        socket.assigns.agent_state
+      else
+        # Fetch from server
+        try do
+          LangChain.Agents.AgentServer.get_state(agent_id)
+        catch
+          :exit, _ -> nil
+        end
       end
 
     socket
