@@ -173,7 +173,7 @@ defmodule SagentsLiveDebugger.AgentListLive do
 
         # Touch the agent to reset inactivity timer
         if connected?(socket) do
-          LangChain.Agents.AgentServer.touch(agent_id)
+          Sagents.AgentServer.touch(agent_id)
         end
 
         # Load agent detail
@@ -224,8 +224,8 @@ defmodule SagentsLiveDebugger.AgentListLive do
   defp subscribe_to_agent_events(socket, agent_id) do
     # Use AgentServer subscription functions
     # Handle case where agent doesn't exist (has shut down)
-    with :ok <- LangChain.Agents.AgentServer.subscribe(agent_id),
-         :ok <- LangChain.Agents.AgentServer.subscribe_debug(agent_id) do
+    with :ok <- Sagents.AgentServer.subscribe(agent_id),
+         :ok <- Sagents.AgentServer.subscribe_debug(agent_id) do
       assign(socket, :subscribed_agent_id, agent_id)
     else
       {:error, :process_not_found} ->
@@ -240,8 +240,8 @@ defmodule SagentsLiveDebugger.AgentListLive do
 
   defp unsubscribe_from_agent_events(agent_id, _coordinator) do
     # Unsubscribe returns :ok even if the agent process doesn't exist
-    :ok = LangChain.Agents.AgentServer.unsubscribe(agent_id)
-    :ok = LangChain.Agents.AgentServer.unsubscribe_debug(agent_id)
+    :ok = Sagents.AgentServer.unsubscribe(agent_id)
+    :ok = Sagents.AgentServer.unsubscribe_debug(agent_id)
   end
 
   # Handle agent status change events (for detail view)
@@ -535,7 +535,7 @@ defmodule SagentsLiveDebugger.AgentListLive do
     base_path = socket.assigns[:base_path] || ""
 
     # Touch the agent to reset inactivity timer
-    LangChain.Agents.AgentServer.touch(agent_id)
+    Sagents.AgentServer.touch(agent_id)
 
     {:noreply, push_patch(socket, to: "#{base_path}?agent_id=#{agent_id}&tab=#{tab}")}
   end
@@ -615,7 +615,7 @@ defmodule SagentsLiveDebugger.AgentListLive do
 
   defp build_agents_from_presence(presence_module, coordinator) do
     presence_module
-    |> LangChain.Presence.list(@agent_presence_topic)
+    |> Sagents.Presence.list(@agent_presence_topic)
     |> Enum.map(fn {agent_id, %{metas: [meta | _]}} ->
       %{
         agent_id: agent_id,
@@ -704,7 +704,7 @@ defmodule SagentsLiveDebugger.AgentListLive do
   #
   # Updates are detected by:
   # - phx_ref_prev in join metadata (Phoenix.Presence.update/3 links to old entry)
-  # - Agent appears in both joins AND leaves (LangChain.Presence.update untrack+track)
+  # - Agent appears in both joins AND leaves (Sagents.Presence.update untrack+track)
 
   # Categorizes a presence_diff payload into joined, left, and updated agents.
   # Returns `%{joined: %{}, left: %{}, updated: %{}}` where each map contains
@@ -726,7 +726,7 @@ defmodule SagentsLiveDebugger.AgentListLive do
           %{acc | updated: Map.put(acc.updated, agent_id, in_joins)}
 
         # Agent in both joins AND leaves (without phx_ref_prev) -> UPDATE
-        # This is the LangChain.Presence.update pattern (untrack + track)
+        # This is the Sagents.Presence.update pattern (untrack + track)
         in_joins && in_leaves ->
           %{acc | updated: Map.put(acc.updated, agent_id, in_joins)}
 
@@ -808,8 +808,8 @@ defmodule SagentsLiveDebugger.AgentListLive do
     # Subscribe to agent events
     socket =
       if connected?(socket) do
-        with :ok <- LangChain.Agents.AgentServer.subscribe(agent_id),
-             :ok <- LangChain.Agents.AgentServer.subscribe_debug(agent_id) do
+        with :ok <- Sagents.AgentServer.subscribe(agent_id),
+             :ok <- Sagents.AgentServer.subscribe_debug(agent_id) do
           socket
         else
           _error -> socket
@@ -821,7 +821,7 @@ defmodule SagentsLiveDebugger.AgentListLive do
     # Fetch current agent state for initial display
     initial_state =
       try do
-        LangChain.Agents.AgentServer.get_state(agent_id)
+        Sagents.AgentServer.get_state(agent_id)
       catch
         :exit, _ -> nil
       end
@@ -840,8 +840,8 @@ defmodule SagentsLiveDebugger.AgentListLive do
 
       agent_id ->
         # Unsubscribe from agent events
-        LangChain.Agents.AgentServer.unsubscribe(agent_id)
-        LangChain.Agents.AgentServer.unsubscribe_debug(agent_id)
+        Sagents.AgentServer.unsubscribe(agent_id)
+        Sagents.AgentServer.unsubscribe_debug(agent_id)
 
         socket
         |> assign(:followed_agent_id, nil)
@@ -888,20 +888,20 @@ defmodule SagentsLiveDebugger.AgentListLive do
 
   # Subscribe to a presence topic
   defp subscribe_to_presence(pubsub_name, topic) do
-    # Use LangChain.PubSub for automatic deduplication
-    LangChain.PubSub.subscribe(Phoenix.PubSub, pubsub_name, topic)
+    # Use Sagents.PubSub for automatic deduplication
+    Sagents.PubSub.subscribe(Phoenix.PubSub, pubsub_name, topic)
   end
 
   # Load agent detail data
   defp load_agent_detail(socket, agent_id) do
     metadata =
-      case LangChain.Agents.AgentServer.get_metadata(agent_id) do
+      case Sagents.AgentServer.get_metadata(agent_id) do
         {:ok, meta} -> meta
         {:error, _} -> nil
       end
 
     agent =
-      case LangChain.Agents.AgentServer.get_agent(agent_id) do
+      case Sagents.AgentServer.get_agent(agent_id) do
         {:ok, agent} -> agent
         {:error, _} -> nil
       end
@@ -916,7 +916,7 @@ defmodule SagentsLiveDebugger.AgentListLive do
       else
         # Fetch from server
         try do
-          LangChain.Agents.AgentServer.get_state(agent_id)
+          Sagents.AgentServer.get_state(agent_id)
         catch
           :exit, _ -> nil
         end
@@ -948,7 +948,7 @@ defmodule SagentsLiveDebugger.AgentListLive do
       node: node()
     }
 
-    case LangChain.Presence.track(
+    case Sagents.Presence.track(
            presence_module,
            @debug_viewers_topic,
            debugger_id,
@@ -966,7 +966,7 @@ defmodule SagentsLiveDebugger.AgentListLive do
 
   # Subscribe to agent presence topic for real-time agent discovery
   defp subscribe_to_agent_presence(pubsub_name) do
-    LangChain.PubSub.subscribe(Phoenix.PubSub, pubsub_name, @agent_presence_topic)
+    Sagents.PubSub.subscribe(Phoenix.PubSub, pubsub_name, @agent_presence_topic)
   end
 
   def render(assigns) do
@@ -1533,7 +1533,7 @@ defmodule SagentsLiveDebugger.AgentListLive do
   defp get_agent_presence_metadata(nil, _agent_id), do: nil
 
   defp get_agent_presence_metadata(presence_module, agent_id) do
-    presences = LangChain.Presence.list(presence_module, @agent_presence_topic)
+    presences = Sagents.Presence.list(presence_module, @agent_presence_topic)
 
     case Map.get(presences, agent_id) do
       %{metas: [meta | _]} -> meta
