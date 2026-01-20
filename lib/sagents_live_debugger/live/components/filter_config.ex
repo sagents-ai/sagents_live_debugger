@@ -150,7 +150,7 @@ defmodule SagentsLiveDebugger.Live.Components.FilterConfig do
           <span class="filter-badge none">No Filters</span>
         <% @filter_count > 0 -> %>
           <span class="filter-badge active">
-            {@filter_count} Filter<%= if @filter_count > 1, do: "s" %>
+            {@filter_count} Filter{if @filter_count > 1, do: "s"}
           </span>
         <% true -> %>
           <span class="filter-badge none">No Filters</span>
@@ -165,8 +165,12 @@ defmodule SagentsLiveDebugger.Live.Components.FilterConfig do
 
   defp extract_filter_values(filters) when is_list(filters) do
     Enum.reduce(filters, %{}, fn
-      {:conversation_id, value}, acc -> Map.put(acc, :conversation_id, value)
-      {:agent_id, value}, acc -> Map.put(acc, :agent_id, value)
+      {:conversation_id, value}, acc ->
+        Map.put(acc, :conversation_id, value)
+
+      {:agent_id, value}, acc ->
+        Map.put(acc, :agent_id, value)
+
       {key, value}, acc when is_atom(key) ->
         acc
         |> Map.put(:custom_key, to_string(key))
@@ -212,10 +216,18 @@ defmodule SagentsLiveDebugger.Live.Components.FilterConfig do
 
     filters =
       case {params["custom_key"], params["custom_value"]} do
-        {nil, _} -> filters
-        {_, nil} -> filters
-        {"", _} -> filters
-        {_, ""} -> filters
+        {nil, _} ->
+          filters
+
+        {_, nil} ->
+          filters
+
+        {"", _} ->
+          filters
+
+        {_, ""} ->
+          filters
+
         {key, value} ->
           try do
             [{String.to_existing_atom(key), value} | filters]

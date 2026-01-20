@@ -1149,19 +1149,19 @@ defmodule SagentsLiveDebugger.AgentListLive do
           </div>
         <% end %>
       </header>
-
+      
     <!-- System Overview Panel -->
       <.system_overview metrics={@metrics} />
-
+      
     <!-- Auto-Follow Filter Configuration -->
       <.filter_config_form
         filters={@auto_follow_filters}
         presence_active={@followed_agent_id != nil}
       />
-
+      
     <!-- Agent List Filters (for visibility/sorting) -->
       <.filter_controls form={@form} />
-
+      
     <!-- Active Agent List -->
       <.agent_table agents={@filtered_agents} followed_agent_id={@followed_agent_id} />
     </div>
@@ -1712,8 +1712,8 @@ defmodule SagentsLiveDebugger.AgentListLive do
           </div>
         </div>
       <% end %>
-
-      <!-- Base System Prompt -->
+      
+    <!-- Base System Prompt -->
       <%= if @agent.base_system_prompt && @agent.base_system_prompt != "" do %>
         <div class="system-message-section">
           <div class="system-message-card base-prompt">
