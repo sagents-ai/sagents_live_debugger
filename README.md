@@ -1,6 +1,6 @@
 # Sagents Live Debugger
 
-A Phoenix LiveView dashboard for debugging and monitoring LangChain agents in real-time. Provides visibility into agent execution, message history, tool calls, middleware actions, todos, sub-agents, and event streams.
+A Phoenix LiveView dashboard for debugging and monitoring [Sagents](https://github.com/sagents-ai/sagents) agents in real-time. Provides visibility into agent execution, message history, tool calls, middleware actions, todos, sub-agents, and event streams.
 
 ## Features
 
@@ -60,7 +60,7 @@ The `sagents_live_debugger` macro accepts the following options:
 
 ### Required
 
-- `:coordinator` - Your application's agent coordinator module (implements coordinator behavior)
+- `:coordinator` - Your application's agent coordinator module (created through a mix task)
 
 ### Optional
 
