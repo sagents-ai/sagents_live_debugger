@@ -1136,7 +1136,11 @@ defmodule SagentsLiveDebugger.AgentListLive do
         </div>
         <%= if @followed_agent_id do %>
           <div class="followed-indicator">
-            <button phx-click="unfollow_agent" class="btn btn-following-toggle" title="Click to unfollow">
+            <button
+              phx-click="unfollow_agent"
+              class="btn btn-following-toggle"
+              title="Click to unfollow"
+            >
               🕵️ Following
             </button>
             <.link patch={"?agent_id=#{@followed_agent_id}"} class="followed-agent-link">
@@ -1228,7 +1232,7 @@ defmodule SagentsLiveDebugger.AgentListLive do
             phx-value-tab="subagents"
             class={"tab-button #{if @current_tab == :subagents, do: "active", else: ""}"}
           >
-            Sub-Agents (<%= map_size(@subagents) %>)
+            Sub-Agents ({map_size(@subagents)})
           </button>
         </div>
 
@@ -1709,7 +1713,7 @@ defmodule SagentsLiveDebugger.AgentListLive do
         </div>
       <% end %>
 
-    <!-- Base System Prompt -->
+      <!-- Base System Prompt -->
       <%= if @agent.base_system_prompt && @agent.base_system_prompt != "" do %>
         <div class="system-message-section">
           <div class="system-message-card base-prompt">

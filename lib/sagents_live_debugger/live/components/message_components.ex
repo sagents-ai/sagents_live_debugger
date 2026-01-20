@@ -207,7 +207,10 @@ defmodule SagentsLiveDebugger.Live.Components.MessageComponents do
         <% end %>
       </div>
       <div class="tool-result-content">
-        <.highlight_code code={format_tool_result(@tool_result.content)} language={detect_result_language(@tool_result.content)} />
+        <.highlight_code
+          code={format_tool_result(@tool_result.content)}
+          language={detect_result_language(@tool_result.content)}
+        />
       </div>
     </div>
     """

@@ -69,18 +69,18 @@ defmodule SagentsLiveDebugger.Live.Components.SubagentsTab do
         phx-value-id={@subagent.id}
       >
         <span class="subagent-expand-icon">
-          <%= if @expanded, do: "▼", else: "▶" %>
+          {if @expanded, do: "▼", else: "▶"}
         </span>
-        <span class="subagent-name"><%= @subagent.name %></span>
+        <span class="subagent-name">{@subagent.name}</span>
         <.status_badge status={@subagent.status} />
         <%= if @subagent.token_usage do %>
           <.token_usage_badge token_usage={@subagent.token_usage} />
         <% end %>
         <span class="subagent-duration">
-          <%= format_duration(@subagent.duration_ms) %>
+          {format_duration(@subagent.duration_ms)}
         </span>
         <span class="subagent-message-count">
-          <%= length(@subagent.messages) %> messages
+          {length(@subagent.messages)} messages
         </span>
       </div>
 
@@ -145,7 +145,7 @@ defmodule SagentsLiveDebugger.Live.Components.SubagentsTab do
   def status_badge(assigns) do
     ~H"""
     <span class={["subagent-status-badge", status_badge_class(@status)]}>
-      <%= format_status(@status) %>
+      {format_status(@status)}
     </span>
     """
   end
@@ -158,7 +158,7 @@ defmodule SagentsLiveDebugger.Live.Components.SubagentsTab do
   def token_usage_badge(assigns) do
     ~H"""
     <span class="subagent-token-badge" title="Input / Output tokens">
-      <%= format_tokens(@token_usage.input) %> / <%= format_tokens(@token_usage.output) %>
+      {format_tokens(@token_usage.input)} / {format_tokens(@token_usage.output)}
     </span>
     """
   end
@@ -173,17 +173,17 @@ defmodule SagentsLiveDebugger.Live.Components.SubagentsTab do
     <div class="subagent-config-view">
       <div class="subagent-config-item">
         <label>ID:</label>
-        <code><%= @subagent.id %></code>
+        <code>{@subagent.id}</code>
       </div>
 
       <div class="subagent-config-item">
         <label>Parent:</label>
-        <code><%= @subagent.parent_id %></code>
+        <code>{@subagent.parent_id}</code>
       </div>
 
       <div class="subagent-config-item">
         <label>Model:</label>
-        <span><%= @subagent.model || "Unknown" %></span>
+        <span>{@subagent.model || "Unknown"}</span>
       </div>
 
       <%= if @subagent.instructions do %>
@@ -339,9 +339,11 @@ defmodule SagentsLiveDebugger.Live.Components.SubagentsTab do
 
   # Format token counts with K suffix for thousands
   defp format_tokens(nil), do: "-"
+
   defp format_tokens(count) when is_integer(count) and count >= 1000 do
     "#{Float.round(count / 1000, 1)}K"
   end
+
   defp format_tokens(count) when is_integer(count), do: to_string(count)
   defp format_tokens(_), do: "-"
 end
