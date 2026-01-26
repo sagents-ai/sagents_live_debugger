@@ -5,30 +5,30 @@ defmodule SagentsLiveDebugger.TimezoneTest do
   # For now, we'll do a basic integration test
 
   describe "timezone functionality" do
-    test "DateTime.shift_zone/2 works with valid timezones" do
+    test "DateTime.shift_zone/3 works with valid timezones" do
       dt = ~U[2025-01-03 14:32:15Z]
 
       # Test shifting to New York (UTC-5 in winter)
-      assert {:ok, shifted} = DateTime.shift_zone(dt, "America/New_York")
+      assert {:ok, shifted} = DateTime.shift_zone(dt, "America/New_York", Tzdata.TimeZoneDatabase)
       assert shifted.hour == 9
       assert shifted.minute == 32
 
       # Test shifting to Tokyo (UTC+9)
-      assert {:ok, shifted} = DateTime.shift_zone(dt, "Asia/Tokyo")
+      assert {:ok, shifted} = DateTime.shift_zone(dt, "Asia/Tokyo", Tzdata.TimeZoneDatabase)
       assert shifted.hour == 23
       assert shifted.minute == 32
     end
 
-    test "DateTime.shift_zone/2 handles invalid timezones" do
+    test "DateTime.shift_zone/3 handles invalid timezones" do
       dt = ~U[2025-01-03 14:32:15Z]
 
-      assert {:error, _} = DateTime.shift_zone(dt, "Invalid/Timezone")
+      assert {:error, _} = DateTime.shift_zone(dt, "Invalid/Timezone", Tzdata.TimeZoneDatabase)
     end
 
-    test "DateTime.shift_zone/2 works with UTC" do
+    test "DateTime.shift_zone/3 works with UTC" do
       dt = ~U[2025-01-03 14:32:15Z]
 
-      assert {:ok, shifted} = DateTime.shift_zone(dt, "UTC")
+      assert {:ok, shifted} = DateTime.shift_zone(dt, "UTC", Tzdata.TimeZoneDatabase)
       assert shifted.hour == 14
       assert shifted.minute == 32
     end

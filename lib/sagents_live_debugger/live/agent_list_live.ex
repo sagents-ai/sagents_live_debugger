@@ -1919,7 +1919,7 @@ defmodule SagentsLiveDebugger.AgentListLive do
   end
 
   defp format_timestamp(datetime, timezone) do
-    case DateTime.shift_zone(datetime, timezone) do
+    case DateTime.shift_zone(datetime, timezone, Tzdata.TimeZoneDatabase) do
       {:ok, shifted} ->
         shifted
         |> DateTime.truncate(:second)
@@ -2474,7 +2474,7 @@ defmodule SagentsLiveDebugger.AgentListLive do
   end
 
   defp validate_timezone(timezone) when is_binary(timezone) do
-    case DateTime.shift_zone(DateTime.utc_now(), timezone) do
+    case DateTime.shift_zone(DateTime.utc_now(), timezone, Tzdata.TimeZoneDatabase) do
       {:ok, _} -> {:ok, timezone}
       {:error, _} -> {:error, :invalid_timezone}
     end
