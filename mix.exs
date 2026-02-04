@@ -30,7 +30,7 @@ defmodule SagentsLiveDebugger.MixProject do
     [
       {:phoenix_live_view, "~> 1.0"},
       {:jason, "~> 1.4"},
-      {:langchain, path: "../my_langchain"},
+      {:langchain, "~> 0.5.1"},
       {:sagents, path: "../sagents"},
       # markdown and code highlighting (autumn)
       {:mdex, "~> 0.11.0"},
