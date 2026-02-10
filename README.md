@@ -122,7 +122,7 @@ config :sagents_live_debugger,
 
 ### Agent Messages
 
-Get insights into the message exchange from the perspective of the agent. Middleware is used to build the system prompt for your agent — see exactly how the agent is configured quickly and easily. Browse the complete message history including tool calls, tool results, and thinking blocks.
+Get insights into the message exchange from the perspective of the agent. Middleware is used to build the system prompt for your agent. See exactly how the agent is configured quickly and easily. Browse the complete message history including tool calls, tool results, and thinking blocks.
 
 ![Agent messages showing system prompt and conversation history](screenshots/02-main-messages.png)
 
@@ -160,7 +160,7 @@ Getting insight into sub-agents is critically important. Sub-agents are launched
 
 #### Sub-Agent Config
 
-See what instructions a sub-agent received from the main agent and what its response was. This reveals the full picture of the delegation — what was asked and what was returned.
+See what instructions a sub-agent received from the main agent and what its response was. This reveals the full picture of the delegation: what was asked and what was returned.
 
 ![Sub-agent config showing instructions and response](screenshots/06-sub-agent-config.png)
 
