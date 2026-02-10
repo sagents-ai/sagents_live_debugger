@@ -6,12 +6,11 @@ A Phoenix LiveView dashboard for debugging and monitoring [Sagents](https://gith
 
 - **Real-time Agent Monitoring**: View all running agents with status, uptime, and viewer counts
 - **Presence-Based Discovery**: Agents are discovered instantly via Phoenix Presence (no polling)
-- **Auto-Follow First**: Automatically follow the first agent that appears for immediate debugging
+- **Auto-Follow First**: Automatically follow the first matching agent that appears for immediate debugging
 - **Sub-Agent Visibility**: Monitor sub-agents spawned by parent agents with full event tracking
 - **Message Inspection**: Browse complete message history with tool calls, results, and thinking blocks
 - **Event Stream**: Live feed of agent events (LLM calls, middleware actions, tool executions)
 - **Todo Tracking**: Monitor agent task lists and progress in real-time
-- **Timezone Localization**: Automatically displays timestamps in your browser's timezone
 - **Production Safe**: Filter-based agent selection for production environments
 
 ## Installation
@@ -25,6 +24,10 @@ def deps do
   ]
 end
 ```
+
+## Screenshots
+
+
 
 ## Setup
 
@@ -53,6 +56,10 @@ config :elixir, :time_zone_database, Tzdata.TimeZoneDatabase
 ```
 
 That's it! Visit `http://localhost:4000/dev/debug/agents` to access the debugger.
+
+Try it out yourself in the [AgentsDemo](https://github.com/sagents-ai/agents_demo) project. It's built-in and ready to explore!
+
+![AgentsDemo example application showing active TODO items](screenshots/AgentsDemo-Todo.png)
 
 ## Configuration Options
 
@@ -97,6 +104,8 @@ Agent presence metadata includes:
 - `conversation_id` - Associated conversation (if any)
 - Custom scope fields from `filesystem_scope` (e.g., `project_id`, `user_id`)
 
+![Presence detection reveals agents immediately](screenshots/01-agent-list-dashboard.png)
+
 ### Auto-Follow First
 
 In development mode, the debugger automatically follows the first agent that appears. This eliminates the need for manual agent selection during local development.
@@ -111,6 +120,30 @@ config :sagents_live_debugger,
 
 **Note:** The library defaults to dev-friendly settings (auto-follow on). You only need to add config to change this default.
 
+### Agent Messages
+
+Get insights into the message exchange from the perspective of the agent. Middleware is used to build the system prompt for your agent — see exactly how the agent is configured quickly and easily. Browse the complete message history including tool calls, tool results, and thinking blocks.
+
+![Agent messages showing system prompt and conversation history](screenshots/02-main-messages.png)
+
+### Middleware Config
+
+A significant feature of Sagents is how middleware makes an agent's abilities composable and powerful. See the middleware your agent was configured with and explore the configured settings for each middleware.
+
+![Middleware configuration showing composable agent capabilities](screenshots/03-main-middleware.png)
+
+### Tool Insights
+
+Tools are the way agents get things done. See all the tools, their configuration, and instructions to the agent revealed in one easy location.
+
+![Tool configuration and instructions overview](screenshots/04-main-tools.png)
+
+### Event Stream
+
+When working with agents, being able to see the stream of events they are receiving and emitting is incredibly valuable. The SagentsLiveDebugger subscribes to the additional and optional debug event stream to give even greater insights into what's happening with your agent.
+
+![Live event stream showing agent activity](screenshots/05-event-stream.png)
+
 ### Sub-Agents Tab
 
 When an agent spawns sub-agents (via the Task tool), they appear in the Sub-Agents tab with full visibility:
@@ -123,13 +156,25 @@ When an agent spawns sub-agents (via the Task tool), they appear in the Sub-Agen
 
 Sub-agent events are automatically broadcast through the parent agent's debug topic, requiring no additional configuration.
 
-## Timezone Display
+Getting insight into sub-agents is critically important. Sub-agents are launched by the main agent when it determines they are needed. They receive their instructions from the main agent and return their response back to the main agent. This visibility into sub-agents helps you confirm the system is working as expected, or reveals issues where something isn't configured correctly.
 
-The debugger automatically detects your browser's timezone and displays all timestamps in your local time. If timezone detection fails, UTC is used as a fallback.
+#### Sub-Agent Config
 
-Timestamps are displayed in the format: `HH:MM:SS TZ` (e.g., `14:32:15 EST`)
+See what instructions a sub-agent received from the main agent and what its response was. This reveals the full picture of the delegation — what was asked and what was returned.
 
-**No configuration required** - timezone detection works automatically via JavaScript.
+![Sub-agent config showing instructions and response](screenshots/06-sub-agent-config.png)
+
+#### Sub-Agent Messages
+
+View the multi-turn conversation a sub-agent has as it uses tools and works towards an answer for its task. Follow the sub-agent's reasoning step by step.
+
+![Sub-agent multi-turn message history](screenshots/07-sub-agent-messages.png)
+
+#### Sub-Agent Tools
+
+See the tools a sub-agent has access to in order to do its work.
+
+![Sub-agent available tools](screenshots/08-sub-agent-tools.png)
 
 ## Architecture Notes
 
@@ -171,7 +216,7 @@ SubAgentServer                      |
 
 ## Browser Compatibility
 
-The timezone detection feature uses `Intl.DateTimeFormat().resolvedOptions().timeZone`, which is supported in:
+Automatic timezone detection for the event display uses `Intl.DateTimeFormat().resolvedOptions().timeZone`, which is supported in:
 - Chrome/Edge 24+
 - Firefox 52+
 - Safari 10+
@@ -198,8 +243,5 @@ With production settings, users must manually select agents to follow.
 
 ## License
 
-Copyright (c) 2025
+Apache-2.0 license - see [LICENSE](LICENSE) for details.
 
-## Dev debugging note
-
-When needing to fix the event timestamp localization: `mix deps.compile sagents_live_debugger --force`
