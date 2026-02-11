@@ -25,10 +25,6 @@ def deps do
 end
 ```
 
-## Screenshots
-
-
-
 ## Setup
 
 Add the debugger to your Phoenix router:
