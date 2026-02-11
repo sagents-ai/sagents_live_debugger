@@ -59,7 +59,7 @@ That's it! Visit `http://localhost:4000/dev/debug/agents` to access the debugger
 
 Try it out yourself in the [AgentsDemo](https://github.com/sagents-ai/agents_demo) project. It's built-in and ready to explore!
 
-![AgentsDemo example application showing active TODO items](screenshots/AgentsDemo-Todo.png)
+![AgentsDemo example application showing active TODO items](https://raw.githubusercontent.com/sagents-ai/sagents_live_debugger/refs/heads/main/screenshots/AgentsDemo-Todo.png)
 
 ## Configuration Options
 
@@ -104,7 +104,7 @@ Agent presence metadata includes:
 - `conversation_id` - Associated conversation (if any)
 - Custom scope fields from `filesystem_scope` (e.g., `project_id`, `user_id`)
 
-![Presence detection reveals agents immediately](screenshots/01-agent-list-dashboard.png)
+![Presence detection reveals agents immediately](https://raw.githubusercontent.com/sagents-ai/sagents_live_debugger/refs/heads/main/screenshots/01-agent-list-dashboard.png)
 
 ### Auto-Follow First
 
@@ -124,25 +124,25 @@ config :sagents_live_debugger,
 
 Get insights into the message exchange from the perspective of the agent. Middleware is used to build the system prompt for your agent. See exactly how the agent is configured quickly and easily. Browse the complete message history including tool calls, tool results, and thinking blocks.
 
-![Agent messages showing system prompt and conversation history](screenshots/02-main-messages.png)
+![Agent messages showing system prompt and conversation history](https://raw.githubusercontent.com/sagents-ai/sagents_live_debugger/refs/heads/main/screenshots/02-main-messages.png)
 
 ### Middleware Config
 
 A significant feature of Sagents is how middleware makes an agent's abilities composable and powerful. See the middleware your agent was configured with and explore the configured settings for each middleware.
 
-![Middleware configuration showing composable agent capabilities](screenshots/03-main-middleware.png)
+![Middleware configuration showing composable agent capabilities](https://raw.githubusercontent.com/sagents-ai/sagents_live_debugger/refs/heads/main/screenshots/03-main-middleware.png)
 
 ### Tool Insights
 
 Tools are the way agents get things done. See all the tools, their configuration, and instructions to the agent revealed in one easy location.
 
-![Tool configuration and instructions overview](screenshots/04-main-tools.png)
+![Tool configuration and instructions overview](https://raw.githubusercontent.com/sagents-ai/sagents_live_debugger/refs/heads/main/screenshots/04-main-tools.png)
 
 ### Event Stream
 
 When working with agents, being able to see the stream of events they are receiving and emitting is incredibly valuable. The SagentsLiveDebugger subscribes to the additional and optional debug event stream to give even greater insights into what's happening with your agent.
 
-![Live event stream showing agent activity](screenshots/05-event-stream.png)
+![Live event stream showing agent activity](https://raw.githubusercontent.com/sagents-ai/sagents_live_debugger/refs/heads/main/screenshots/05-event-stream.png)
 
 ### Sub-Agents Tab
 
@@ -162,19 +162,19 @@ Getting insight into sub-agents is critically important. Sub-agents are launched
 
 See what instructions a sub-agent received from the main agent and what its response was. This reveals the full picture of the delegation: what was asked and what was returned.
 
-![Sub-agent config showing instructions and response](screenshots/06-sub-agent-config.png)
+![Sub-agent config showing instructions and response](https://raw.githubusercontent.com/sagents-ai/sagents_live_debugger/refs/heads/main/screenshots/06-sub-agent-config.png)
 
 #### Sub-Agent Messages
 
 View the multi-turn conversation a sub-agent has as it uses tools and works towards an answer for its task. Follow the sub-agent's reasoning step by step.
 
-![Sub-agent multi-turn message history](screenshots/07-sub-agent-messages.png)
+![Sub-agent multi-turn message history](https://raw.githubusercontent.com/sagents-ai/sagents_live_debugger/refs/heads/main/screenshots/07-sub-agent-messages.png)
 
 #### Sub-Agent Tools
 
 See the tools a sub-agent has access to in order to do its work.
 
-![Sub-agent available tools](screenshots/08-sub-agent-tools.png)
+![Sub-agent available tools](https://raw.githubusercontent.com/sagents-ai/sagents_live_debugger/refs/heads/main/screenshots/08-sub-agent-tools.png)
 
 ## Architecture Notes
 

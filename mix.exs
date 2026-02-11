@@ -1,14 +1,23 @@
 defmodule SagentsLiveDebugger.MixProject do
   use Mix.Project
 
+  @source_url "https://github.com/sagents-ai/sagents_live_debugger"
+  @version "0.1.0"
+
   def project do
     [
       app: :sagents_live_debugger,
-      version: "0.1.0",
-      elixir: "~> 1.19",
-      aliases: aliases(),
+      version: @version,
+      elixir: "~> 1.17",
+      test_options: [docs: true],
       start_permanent: Mix.env() == :prod,
-      deps: deps()
+      aliases: aliases(),
+      deps: deps(),
+      package: package(),
+      # docs: docs(),
+      name: "Sagents LiveDebugger",
+      homepage_url: @source_url,
+      description: "A Phoenix LiveView dashboard for debugging and monitoring Sagents agents in real-time."
     ]
   end
 
@@ -30,7 +39,7 @@ defmodule SagentsLiveDebugger.MixProject do
     [
       {:phoenix_live_view, "~> 1.0"},
       {:jason, "~> 1.4"},
-      {:sagents, path: "../sagents"},
+      {:sagents, "~> 0.1.0"},
       # markdown and code highlighting (autumn)
       {:mdex, "~> 0.11.0"},
       {:autumn, "~> 0.6"},
@@ -47,6 +56,22 @@ defmodule SagentsLiveDebugger.MixProject do
   defp aliases do
     [
       precommit: ["compile --warning-as-errors", "deps.unlock --unused", "format", "test"]
+    ]
+  end
+
+  defp package do
+    [
+      files: [
+        "lib",
+        ".formatter.exs",
+        "mix.exs",
+        "README*",
+        "CHANGELOG*",
+        "LICENSE*"
+      ],
+      maintainers: ["Mark Ericksen"],
+      licenses: ["Apache-2.0"],
+      links: %{"GitHub" => @source_url}
     ]
   end
 end
