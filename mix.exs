@@ -14,7 +14,7 @@ defmodule SagentsLiveDebugger.MixProject do
       aliases: aliases(),
       deps: deps(),
       package: package(),
-      # docs: docs(),
+      docs: docs(),
       name: "Sagents LiveDebugger",
       homepage_url: @source_url,
       description:
