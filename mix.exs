@@ -17,7 +17,8 @@ defmodule SagentsLiveDebugger.MixProject do
       # docs: docs(),
       name: "Sagents LiveDebugger",
       homepage_url: @source_url,
-      description: "A Phoenix LiveView dashboard for debugging and monitoring Sagents agents in real-time."
+      description:
+        "A Phoenix LiveView dashboard for debugging and monitoring Sagents agents in real-time."
     ]
   end
 
@@ -43,7 +44,9 @@ defmodule SagentsLiveDebugger.MixProject do
       # markdown and code highlighting (autumn)
       {:mdex, "~> 0.11.0"},
       {:autumn, "~> 0.6"},
-      {:tzdata, "~> 1.1"}
+      {:tzdata, "~> 1.1"},
+      # Docs
+      {:ex_doc, ">= 0.0.0", only: :dev, runtime: false}
     ]
   end
 
@@ -56,6 +59,21 @@ defmodule SagentsLiveDebugger.MixProject do
   defp aliases do
     [
       precommit: ["compile --warning-as-errors", "deps.unlock --unused", "format", "test"]
+    ]
+  end
+
+  defp docs do
+    [
+      main: "readme",
+      extras: extras()
+    ]
+  end
+
+  defp extras do
+    [
+      "README.md",
+      "CHANGELOG.md",
+      "LICENSE"
     ]
   end
 
