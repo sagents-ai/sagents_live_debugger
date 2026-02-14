@@ -43,7 +43,7 @@ defmodule SagentsLiveDebugger.MixProject do
       {:sagents, "~> 0.1.0"},
       # markdown and code highlighting (autumn)
       {:mdex, "~> 0.11.0"},
-      {:autumn, "~> 0.6"},
+      {:lumis, "~> 0.1"},
       {:tzdata, "~> 1.1"},
       # Docs
       {:ex_doc, ">= 0.0.0", only: :dev, runtime: false}
