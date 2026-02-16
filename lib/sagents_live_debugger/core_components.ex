@@ -448,7 +448,7 @@ defmodule SagentsLiveDebugger.CoreComponents do
   end
 
   @doc """
-  Renders syntax-highlighted code using Autumn.
+  Renders syntax-highlighted code using Lumis.
 
   ## Attributes
     * `:code` - The code string to highlight (required)
@@ -463,7 +463,7 @@ defmodule SagentsLiveDebugger.CoreComponents do
   attr :language, :string, default: "elixir"
 
   def highlight_code(assigns) do
-    highlighted = highlight_with_autumn(assigns.code, assigns.language)
+    highlighted = highlight_with_lumis(assigns.code, assigns.language)
     assigns = assign(assigns, :highlighted, highlighted)
 
     ~H"""
@@ -471,7 +471,7 @@ defmodule SagentsLiveDebugger.CoreComponents do
     """
   end
 
-  defp highlight_with_autumn(code, language) when is_binary(code) do
+  defp highlight_with_lumis(code, language) when is_binary(code) do
     # Themes: dracula, onedark, material_oceanic
     Lumis.highlight!(code,
       language: language,
@@ -484,7 +484,7 @@ defmodule SagentsLiveDebugger.CoreComponents do
       "<pre>#{escaped}</pre>"
   end
 
-  defp highlight_with_autumn(code, _language) do
+  defp highlight_with_lumis(code, _language) do
     escaped = code |> inspect(limit: :infinity) |> escape_html()
     "<pre>#{escaped}</pre>"
   end
