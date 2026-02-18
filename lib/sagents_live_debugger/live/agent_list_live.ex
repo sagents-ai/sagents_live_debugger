@@ -171,7 +171,7 @@ defmodule SagentsLiveDebugger.AgentListLive do
             _ -> :overview
           end
 
-        # Touch the agent to reset inactivity timer
+        # Touch the agent to reset inactivity timer (works cross-node via RPC)
         if connected?(socket) do
           Sagents.AgentServer.touch(agent_id)
         end
@@ -892,7 +892,9 @@ defmodule SagentsLiveDebugger.AgentListLive do
     Sagents.PubSub.subscribe(Phoenix.PubSub, pubsub_name, topic)
   end
 
-  # Load agent detail data
+  # Load agent detail data.
+  # AgentServer functions use the registry (Horde when configured), so GenServer.call
+  # works transparently across nodes
   defp load_agent_detail(socket, agent_id) do
     metadata =
       case Sagents.AgentServer.get_metadata(agent_id) do
@@ -911,10 +913,8 @@ defmodule SagentsLiveDebugger.AgentListLive do
     # (e.g., :after_middleware_state) that are more current than the server's stored state.
     state =
       if socket.assigns.followed_agent_id == agent_id && socket.assigns[:agent_state] != nil do
-        # Keep existing state from live events
         socket.assigns.agent_state
       else
-        # Fetch from server
         try do
           Sagents.AgentServer.get_state(agent_id)
         catch
@@ -952,7 +952,6 @@ defmodule SagentsLiveDebugger.AgentListLive do
            presence_module,
            @debug_viewers_topic,
            debugger_id,
-           self(),
            metadata
          ) do
       {:ok, _ref} ->
@@ -1370,6 +1369,7 @@ defmodule SagentsLiveDebugger.AgentListLive do
           <tr>
             <th>Agent ID</th>
             <th>Status</th>
+            <th>Node</th>
             <th>Viewers</th>
             <th>Last Activity</th>
             <th>Uptime</th>
@@ -1422,6 +1422,9 @@ defmodule SagentsLiveDebugger.AgentListLive do
         <div class="status-desc">
           {status_description(@agent.status)}
         </div>
+      </td>
+      <td class="text-gray">
+        <span class="node-name">{format_node_name(@agent.node)}</span>
       </td>
       <td>
         <span class="viewer-count">
@@ -1494,6 +1497,10 @@ defmodule SagentsLiveDebugger.AgentListLive do
   defp status_description(:cancelled), do: "🚫 Cancelled by user"
   defp status_description(:shutdown), do: "💨 Shut down"
   defp status_description(_), do: "❓ Unknown"
+
+  defp format_node_name(nil), do: "—"
+  defp format_node_name(:nonode@nohost), do: "local"
+  defp format_node_name(node) when is_atom(node), do: Atom.to_string(node)
 
   defp format_time_ago(nil), do: "Never"
 
@@ -1588,6 +1595,12 @@ defmodule SagentsLiveDebugger.AgentListLive do
           <div class="info-row">
             <span class="info-label">Agent Name:</span>
             <span class="info-value">{@agent.name}</span>
+          </div>
+        <% end %>
+        <%= if @metadata.node do %>
+          <div class="info-row">
+            <span class="info-label">Node:</span>
+            <span class="info-value">{format_node_name(@metadata.node)}</span>
           </div>
         <% end %>
       </div>
@@ -2210,6 +2223,20 @@ defmodule SagentsLiveDebugger.AgentListLive do
           middleware: middleware_name,
           action: action_summary,
           summary: "#{middleware_name}: #{action_summary}"
+        }
+
+      {:node_transferring, data} ->
+        %{
+          type: "node_transferring",
+          from_node: Map.get(data, :from_node),
+          summary: "Transferring from #{Map.get(data, :from_node, "unknown")}"
+        }
+
+      {:node_transferred, data} ->
+        %{
+          type: "node_transferred",
+          to_node: Map.get(data, :to_node),
+          summary: "Transferred to #{Map.get(data, :to_node, "unknown")}"
         }
 
       {:agent_shutdown, data} ->
