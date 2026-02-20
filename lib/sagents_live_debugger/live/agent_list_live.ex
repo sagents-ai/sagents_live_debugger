@@ -616,7 +616,11 @@ defmodule SagentsLiveDebugger.AgentListLive do
   defp build_agents_from_presence(presence_module, coordinator) do
     presence_module
     |> Sagents.Presence.list(@agent_presence_topic)
-    |> Enum.map(fn {agent_id, %{metas: [meta | _]}} ->
+    |> Enum.map(fn {agent_id, %{metas: metas}} ->
+      # Pick the most recent meta (by last_activity_at) to handle Horde migration
+      # where both old and new node entries may briefly coexist
+      meta = most_recent_meta(metas)
+
       %{
         agent_id: agent_id,
         status: Map.get(meta, :status, :unknown),
@@ -629,6 +633,17 @@ defmodule SagentsLiveDebugger.AgentListLive do
       }
     end)
     |> Enum.sort_by(& &1.last_activity, {:desc, DateTime})
+  end
+
+  # Select the most recent meta from a list of presence metas.
+  # During Horde migration, both old and new node entries may briefly coexist.
+  # Picking the most recent ensures we show the correct (new) node.
+  defp most_recent_meta([single]), do: single
+
+  defp most_recent_meta(metas) do
+    Enum.max_by(metas, fn meta ->
+      Map.get(meta, :last_activity_at, ~U[1970-01-01 00:00:00Z])
+    end, DateTime)
   end
 
   defp get_viewer_count_from_presence(_coordinator, nil), do: 0
@@ -1123,7 +1138,7 @@ defmodule SagentsLiveDebugger.AgentListLive do
     <div class="container">
       <header class="header">
         <div class="header-row">
-          <h1>Agent Debug Dashboard</h1>
+          <h1>Sagents Debug Dashboard</h1>
           <label class="auto-follow-toggle">
             <input
               type="checkbox"
@@ -1148,19 +1163,19 @@ defmodule SagentsLiveDebugger.AgentListLive do
           </div>
         <% end %>
       </header>
-      
+
     <!-- System Overview Panel -->
       <.system_overview metrics={@metrics} />
-      
+
     <!-- Auto-Follow Filter Configuration -->
       <.filter_config_form
         filters={@auto_follow_filters}
         presence_active={@followed_agent_id != nil}
       />
-      
+
     <!-- Agent List Filters (for visibility/sorting) -->
       <.filter_controls form={@form} />
-      
+
     <!-- Active Agent List -->
       <.agent_table agents={@filtered_agents} followed_agent_id={@followed_agent_id} />
     </div>
@@ -1547,7 +1562,7 @@ defmodule SagentsLiveDebugger.AgentListLive do
     presences = Sagents.Presence.list(presence_module, @agent_presence_topic)
 
     case Map.get(presences, agent_id) do
-      %{metas: [meta | _]} -> meta
+      %{metas: metas} when metas != [] -> most_recent_meta(metas)
       _ -> nil
     end
   end
@@ -1725,7 +1740,7 @@ defmodule SagentsLiveDebugger.AgentListLive do
           </div>
         </div>
       <% end %>
-      
+
     <!-- Base System Prompt -->
       <%= if @agent.base_system_prompt && @agent.base_system_prompt != "" do %>
         <div class="system-message-section">
