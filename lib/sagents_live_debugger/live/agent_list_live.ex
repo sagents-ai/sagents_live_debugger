@@ -641,9 +641,13 @@ defmodule SagentsLiveDebugger.AgentListLive do
   defp most_recent_meta([single]), do: single
 
   defp most_recent_meta(metas) do
-    Enum.max_by(metas, fn meta ->
-      Map.get(meta, :last_activity_at, ~U[1970-01-01 00:00:00Z])
-    end, DateTime)
+    Enum.max_by(
+      metas,
+      fn meta ->
+        Map.get(meta, :last_activity_at, ~U[1970-01-01 00:00:00Z])
+      end,
+      DateTime
+    )
   end
 
   defp get_viewer_count_from_presence(_coordinator, nil), do: 0
@@ -1163,19 +1167,19 @@ defmodule SagentsLiveDebugger.AgentListLive do
           </div>
         <% end %>
       </header>
-
+      
     <!-- System Overview Panel -->
       <.system_overview metrics={@metrics} />
-
+      
     <!-- Auto-Follow Filter Configuration -->
       <.filter_config_form
         filters={@auto_follow_filters}
         presence_active={@followed_agent_id != nil}
       />
-
+      
     <!-- Agent List Filters (for visibility/sorting) -->
       <.filter_controls form={@form} />
-
+      
     <!-- Active Agent List -->
       <.agent_table agents={@filtered_agents} followed_agent_id={@followed_agent_id} />
     </div>
@@ -1740,7 +1744,7 @@ defmodule SagentsLiveDebugger.AgentListLive do
           </div>
         </div>
       <% end %>
-
+      
     <!-- Base System Prompt -->
       <%= if @agent.base_system_prompt && @agent.base_system_prompt != "" do %>
         <div class="system-message-section">
