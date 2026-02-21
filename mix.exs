@@ -2,7 +2,7 @@ defmodule SagentsLiveDebugger.MixProject do
   use Mix.Project
 
   @source_url "https://github.com/sagents-ai/sagents_live_debugger"
-  @version "0.1.0"
+  @version "0.2.0"
 
   def project do
     [
@@ -40,8 +40,9 @@ defmodule SagentsLiveDebugger.MixProject do
     [
       {:phoenix_live_view, "~> 1.0"},
       {:jason, "~> 1.4"},
-      {:sagents, path: "../sagents"},
-      # {:sagents, "~> 0.1.0"},
+      # {:sagents, path: "../sagents"},
+      {:sagents, "~> 0.2.0"},
+      {:horde, "~> 0.10.0", optional: true},
       # markdown and code highlighting (autumn)
       {:mdex, "~> 0.11.0"},
       {:lumis, "~> 0.1"},
