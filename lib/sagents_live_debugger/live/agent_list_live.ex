@@ -171,7 +171,7 @@ defmodule SagentsLiveDebugger.AgentListLive do
             _ -> :overview
           end
 
-        # Touch the agent to reset inactivity timer (works cross-node via RPC)
+        # Touch the agent to reset inactivity timer
         if connected?(socket) do
           Sagents.AgentServer.touch(agent_id)
         end
