@@ -171,7 +171,7 @@ defmodule SagentsLiveDebugger.AgentListLive do
             _ -> :overview
           end
 
-        # Touch the agent to reset inactivity timer
+        # Touch the agent to reset inactivity timer (works cross-node via RPC)
         if connected?(socket) do
           Sagents.AgentServer.touch(agent_id)
         end
@@ -616,7 +616,11 @@ defmodule SagentsLiveDebugger.AgentListLive do
   defp build_agents_from_presence(presence_module, coordinator) do
     presence_module
     |> Sagents.Presence.list(@agent_presence_topic)
-    |> Enum.map(fn {agent_id, %{metas: [meta | _]}} ->
+    |> Enum.map(fn {agent_id, %{metas: metas}} ->
+      # Pick the most recent meta (by last_activity_at) to handle Horde migration
+      # where both old and new node entries may briefly coexist
+      meta = most_recent_meta(metas)
+
       %{
         agent_id: agent_id,
         status: Map.get(meta, :status, :unknown),
@@ -629,6 +633,17 @@ defmodule SagentsLiveDebugger.AgentListLive do
       }
     end)
     |> Enum.sort_by(& &1.last_activity, {:desc, DateTime})
+  end
+
+  # Select the most recent meta from a list of presence metas.
+  # During Horde migration, both old and new node entries may briefly coexist.
+  # Picking the most recent ensures we show the correct (new) node.
+  defp most_recent_meta([single]), do: single
+
+  defp most_recent_meta(metas) do
+    Enum.max_by(metas, fn meta ->
+      Map.get(meta, :last_activity_at, ~U[1970-01-01 00:00:00Z])
+    end, DateTime)
   end
 
   defp get_viewer_count_from_presence(_coordinator, nil), do: 0
@@ -892,7 +907,9 @@ defmodule SagentsLiveDebugger.AgentListLive do
     Sagents.PubSub.subscribe(Phoenix.PubSub, pubsub_name, topic)
   end
 
-  # Load agent detail data
+  # Load agent detail data.
+  # AgentServer functions use the registry (Horde when configured), so GenServer.call
+  # works transparently across nodes
   defp load_agent_detail(socket, agent_id) do
     metadata =
       case Sagents.AgentServer.get_metadata(agent_id) do
@@ -911,10 +928,8 @@ defmodule SagentsLiveDebugger.AgentListLive do
     # (e.g., :after_middleware_state) that are more current than the server's stored state.
     state =
       if socket.assigns.followed_agent_id == agent_id && socket.assigns[:agent_state] != nil do
-        # Keep existing state from live events
         socket.assigns.agent_state
       else
-        # Fetch from server
         try do
           Sagents.AgentServer.get_state(agent_id)
         catch
@@ -952,7 +967,6 @@ defmodule SagentsLiveDebugger.AgentListLive do
            presence_module,
            @debug_viewers_topic,
            debugger_id,
-           self(),
            metadata
          ) do
       {:ok, _ref} ->
@@ -1124,7 +1138,7 @@ defmodule SagentsLiveDebugger.AgentListLive do
     <div class="container">
       <header class="header">
         <div class="header-row">
-          <h1>Agent Debug Dashboard</h1>
+          <h1>Sagents Debug Dashboard</h1>
           <label class="auto-follow-toggle">
             <input
               type="checkbox"
@@ -1149,19 +1163,19 @@ defmodule SagentsLiveDebugger.AgentListLive do
           </div>
         <% end %>
       </header>
-      
+
     <!-- System Overview Panel -->
       <.system_overview metrics={@metrics} />
-      
+
     <!-- Auto-Follow Filter Configuration -->
       <.filter_config_form
         filters={@auto_follow_filters}
         presence_active={@followed_agent_id != nil}
       />
-      
+
     <!-- Agent List Filters (for visibility/sorting) -->
       <.filter_controls form={@form} />
-      
+
     <!-- Active Agent List -->
       <.agent_table agents={@filtered_agents} followed_agent_id={@followed_agent_id} />
     </div>
@@ -1370,6 +1384,7 @@ defmodule SagentsLiveDebugger.AgentListLive do
           <tr>
             <th>Agent ID</th>
             <th>Status</th>
+            <th>Node</th>
             <th>Viewers</th>
             <th>Last Activity</th>
             <th>Uptime</th>
@@ -1422,6 +1437,9 @@ defmodule SagentsLiveDebugger.AgentListLive do
         <div class="status-desc">
           {status_description(@agent.status)}
         </div>
+      </td>
+      <td class="text-gray">
+        <span class="node-name">{format_node_name(@agent.node)}</span>
       </td>
       <td>
         <span class="viewer-count">
@@ -1495,6 +1513,10 @@ defmodule SagentsLiveDebugger.AgentListLive do
   defp status_description(:shutdown), do: "💨 Shut down"
   defp status_description(_), do: "❓ Unknown"
 
+  defp format_node_name(nil), do: "—"
+  defp format_node_name(:nonode@nohost), do: "local"
+  defp format_node_name(node) when is_atom(node), do: Atom.to_string(node)
+
   defp format_time_ago(nil), do: "Never"
 
   defp format_time_ago(datetime) do
@@ -1540,7 +1562,7 @@ defmodule SagentsLiveDebugger.AgentListLive do
     presences = Sagents.Presence.list(presence_module, @agent_presence_topic)
 
     case Map.get(presences, agent_id) do
-      %{metas: [meta | _]} -> meta
+      %{metas: metas} when metas != [] -> most_recent_meta(metas)
       _ -> nil
     end
   end
@@ -1588,6 +1610,12 @@ defmodule SagentsLiveDebugger.AgentListLive do
           <div class="info-row">
             <span class="info-label">Agent Name:</span>
             <span class="info-value">{@agent.name}</span>
+          </div>
+        <% end %>
+        <%= if @metadata.node do %>
+          <div class="info-row">
+            <span class="info-label">Node:</span>
+            <span class="info-value">{format_node_name(@metadata.node)}</span>
           </div>
         <% end %>
       </div>
@@ -1712,7 +1740,7 @@ defmodule SagentsLiveDebugger.AgentListLive do
           </div>
         </div>
       <% end %>
-      
+
     <!-- Base System Prompt -->
       <%= if @agent.base_system_prompt && @agent.base_system_prompt != "" do %>
         <div class="system-message-section">
@@ -2210,6 +2238,20 @@ defmodule SagentsLiveDebugger.AgentListLive do
           middleware: middleware_name,
           action: action_summary,
           summary: "#{middleware_name}: #{action_summary}"
+        }
+
+      {:node_transferring, data} ->
+        %{
+          type: "node_transferring",
+          from_node: Map.get(data, :from_node),
+          summary: "Transferring from #{Map.get(data, :from_node, "unknown")}"
+        }
+
+      {:node_transferred, data} ->
+        %{
+          type: "node_transferred",
+          to_node: Map.get(data, :to_node),
+          summary: "Transferred to #{Map.get(data, :to_node, "unknown")}"
         }
 
       {:agent_shutdown, data} ->

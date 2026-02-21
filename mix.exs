@@ -40,7 +40,8 @@ defmodule SagentsLiveDebugger.MixProject do
     [
       {:phoenix_live_view, "~> 1.0"},
       {:jason, "~> 1.4"},
-      {:sagents, "~> 0.1.0"},
+      {:sagents, path: "../sagents"},
+      # {:sagents, "~> 0.1.0"},
       # markdown and code highlighting (autumn)
       {:mdex, "~> 0.11.0"},
       {:lumis, "~> 0.1"},
