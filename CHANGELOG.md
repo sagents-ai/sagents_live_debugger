@@ -1,5 +1,10 @@
 # Changelog
 
+## v0.2.1
+
+### Changed
+- Updated dependency on `sagents` library to `~> 0.2.1`
+
 ## v0.2.0
 
 ### Added
