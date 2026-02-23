@@ -1521,6 +1521,12 @@ defmodule SagentsLiveDebugger.AgentListLive do
   defp format_node_name(:nonode@nohost), do: "local"
   defp format_node_name(node) when is_atom(node), do: Atom.to_string(node)
 
+  defp format_mode(nil), do: "AgentExecution (default)"
+
+  defp format_mode(module) when is_atom(module) do
+    module |> Module.split() |> Enum.join(".")
+  end
+
   defp format_time_ago(nil), do: "Never"
 
   defp format_time_ago(datetime) do
@@ -1622,6 +1628,10 @@ defmodule SagentsLiveDebugger.AgentListLive do
             <span class="info-value">{format_node_name(@metadata.node)}</span>
           </div>
         <% end %>
+        <div class="info-row">
+          <span class="info-label">Run Mode:</span>
+          <span class="info-value">{format_mode(@agent.mode)}</span>
+        </div>
       </div>
     </div>
     """
