@@ -193,10 +193,24 @@ defmodule SagentsLiveDebugger.Live.Components.MessageComponents do
   attr :tool_result, :map, required: true
 
   def tool_result_item(assigns) do
+    is_interrupt = Map.get(assigns.tool_result, :is_interrupt, false)
+    interrupt_data = Map.get(assigns.tool_result, :interrupt_data)
+
+    assigns =
+      assigns
+      |> assign(:is_interrupt, is_interrupt)
+      |> assign(:interrupt_data, interrupt_data)
+      |> assign(:formatted_interrupt_data, format_interrupt_data(interrupt_data))
+
     ~H"""
     <div class="tool-result">
       <div class="tool-result-header">
-        <span class="tool-name">✅ {@tool_result.name || "Result"}</span>
+        <%= if @is_interrupt do %>
+          <span class="tool-name">✋ {@tool_result.name || "Result"}</span>
+          <span class="result-status status-interrupted">INTERRUPTED</span>
+        <% else %>
+          <span class="tool-name">✅ {@tool_result.name || "Result"}</span>
+        <% end %>
         <%= if @tool_result.tool_call_id do %>
           <span class="tool-call-id">{@tool_result.tool_call_id}</span>
         <% end %>
@@ -206,6 +220,11 @@ defmodule SagentsLiveDebugger.Live.Components.MessageComponents do
           </span>
         <% end %>
       </div>
+      <%= if @is_interrupt && @interrupt_data do %>
+        <div class="tool-result-interrupt-data">
+          <.highlight_code code={@formatted_interrupt_data} language="elixir" />
+        </div>
+      <% end %>
       <div class="tool-result-content">
         <.highlight_code
           code={format_tool_result(@tool_result.content)}
@@ -214,6 +233,12 @@ defmodule SagentsLiveDebugger.Live.Components.MessageComponents do
       </div>
     </div>
     """
+  end
+
+  defp format_interrupt_data(nil), do: ""
+
+  defp format_interrupt_data(data) do
+    inspect(data, pretty: true, limit: :infinity)
   end
 
   defp detect_result_language(content) when is_binary(content) do

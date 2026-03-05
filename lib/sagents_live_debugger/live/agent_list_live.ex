@@ -2114,6 +2114,14 @@ defmodule SagentsLiveDebugger.AgentListLive do
 
   defp format_event_data(event) do
     case event do
+      {:status_changed, :interrupted, data} ->
+        %{
+          type: "status_changed",
+          status: "interrupted",
+          summary: "Status: interrupted — #{format_interrupt_summary(data)}",
+          interrupt_data: data
+        }
+
       {:status_changed, status, _data} ->
         %{
           type: "status_changed",
@@ -2129,7 +2137,15 @@ defmodule SagentsLiveDebugger.AgentListLive do
           Enum.map(tool_results, fn result ->
             name = Map.get(result, :name, "unknown")
             is_error = Map.get(result, :is_error, false)
-            status = if is_error, do: "✗", else: "✓"
+            is_interrupt = Map.get(result, :is_interrupt, false)
+
+            status =
+              cond do
+                is_interrupt -> "✋"
+                is_error -> "✗"
+                true -> "✓"
+              end
+
             "#{name} #{status}"
           end)
 
@@ -2337,6 +2353,28 @@ defmodule SagentsLiveDebugger.AgentListLive do
         }
     end
   end
+
+  defp format_interrupt_summary(%{type: :subagent_hitl, subagent_type: type, interrupt_data: inner}) do
+    tools =
+      inner
+      |> Map.get(:action_requests, [])
+      |> Enum.map(& &1[:tool_name] || &1["tool_name"] || "unknown")
+      |> Enum.join(", ")
+
+    "sub-agent (#{type}) awaiting approval for: #{tools}"
+  end
+
+  defp format_interrupt_summary(%{action_requests: action_requests})
+       when is_list(action_requests) do
+    tools =
+      action_requests
+      |> Enum.map(& &1[:tool_name] || &1["tool_name"] || "unknown")
+      |> Enum.join(", ")
+
+    "awaiting approval for: #{tools}"
+  end
+
+  defp format_interrupt_summary(_), do: "awaiting human input"
 
   defp format_action_data(action_data) when is_tuple(action_data) do
     case action_data do
