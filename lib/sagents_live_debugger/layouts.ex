@@ -714,6 +714,24 @@ defmodule SagentsLiveDebugger.Layouts do
       color: #991b1b;
     }
 
+    .result-status.status-interrupted {
+      background: #fef3c7;
+      color: #92400e;
+    }
+
+    .tool-result-interrupt-data {
+      margin-top: 0.5rem;
+      padding: 0.5rem;
+      background: #fffbeb;
+      border: 1px solid #fcd34d;
+      border-radius: 0.375rem;
+    }
+
+    .tool-result-interrupt-data pre {
+      margin: 0;
+      font-size: 0.75rem;
+    }
+
     /* Message Metadata */
     .message-metadata {
       margin-top: 0.75rem;
