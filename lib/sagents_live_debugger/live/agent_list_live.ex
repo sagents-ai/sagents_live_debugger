@@ -2354,11 +2354,15 @@ defmodule SagentsLiveDebugger.AgentListLive do
     end
   end
 
-  defp format_interrupt_summary(%{type: :subagent_hitl, subagent_type: type, interrupt_data: inner}) do
+  defp format_interrupt_summary(%{
+         type: :subagent_hitl,
+         subagent_type: type,
+         interrupt_data: inner
+       }) do
     tools =
       inner
       |> Map.get(:action_requests, [])
-      |> Enum.map(& &1[:tool_name] || &1["tool_name"] || "unknown")
+      |> Enum.map(&(&1[:tool_name] || &1["tool_name"] || "unknown"))
       |> Enum.join(", ")
 
     "sub-agent (#{type}) awaiting approval for: #{tools}"
@@ -2368,7 +2372,7 @@ defmodule SagentsLiveDebugger.AgentListLive do
        when is_list(action_requests) do
     tools =
       action_requests
-      |> Enum.map(& &1[:tool_name] || &1["tool_name"] || "unknown")
+      |> Enum.map(&(&1[:tool_name] || &1["tool_name"] || "unknown"))
       |> Enum.join(", ")
 
     "awaiting approval for: #{tools}"
