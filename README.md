@@ -37,7 +37,8 @@ scope "/dev" do
   pipe_through :browser
 
   sagents_live_debugger "/debug/agents",
-    coordinator: MyApp.Agents.Coordinator
+    coordinator: MyApp.Agents.Coordinator,
+    presence_module: MyAppWeb.Presence
 end
 ```
 
