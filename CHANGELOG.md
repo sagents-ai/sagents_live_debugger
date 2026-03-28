@@ -1,5 +1,13 @@
 # Changelog
 
+## v0.3.1
+
+### Changed
+- Updated dependency on `sagents` library to `~> 0.4.0`
+
+### Fixed
+- README setup example now includes the required `presence_module` option in the router configuration
+
 ## v0.3.0
 
 ### Added
