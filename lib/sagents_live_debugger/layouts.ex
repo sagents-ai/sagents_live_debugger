@@ -1047,6 +1047,44 @@ defmodule SagentsLiveDebugger.Layouts do
       background: #9ca3af;
     }
 
+    /* Middleware Tools Section */
+    .middleware-tools {
+      margin-top: 0.75rem;
+      border: 1px solid #e5e7eb;
+      border-radius: 0.375rem;
+      background: #fafafa;
+    }
+
+    .middleware-tools-header {
+      padding: 0.5rem 1rem;
+      background: #f3f4f6;
+      border-bottom: 1px solid #e5e7eb;
+      border-radius: 0.375rem 0.375rem 0 0;
+    }
+
+    .middleware-tools-header .config-label {
+      margin: 0;
+      font-size: 0.875rem;
+      font-weight: 600;
+      color: #374151;
+    }
+
+    .middleware-tools .list-card {
+      border: none;
+      border-radius: 0;
+      margin: 0;
+    }
+
+    .middleware-tools .list-item {
+      border-left: none;
+      border-right: none;
+      border-radius: 0;
+    }
+
+    .middleware-tools .list-item:last-child {
+      border-bottom: none;
+    }
+
     /* Events Tab Styles */
     .events-tab {
       padding: 20px;

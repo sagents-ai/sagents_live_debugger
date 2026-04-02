@@ -388,6 +388,7 @@ defmodule SagentsLiveDebugger.Live.Components.MessageComponents do
       |> assign(:middleware_id, middleware_id)
       |> assign(:toggle_id, toggle_id)
       |> assign(:prefix, prefix)
+      |> assign(:tools, Sagents.Middleware.get_tools(assigns.entry))
 
     ~H"""
     <div class="list-item">
@@ -412,6 +413,19 @@ defmodule SagentsLiveDebugger.Live.Components.MessageComponents do
             <%= for {key, value} <- @config_without_special do %>
               <.middleware_config_entry key={key} value={value} />
             <% end %>
+          </div>
+        <% end %>
+
+        <%= if @tools != [] do %>
+          <div class="middleware-tools">
+            <div class="middleware-tools-header">
+              <span class="config-label">Tools ({length(@tools)})</span>
+            </div>
+            <div class="list-card">
+              <%= for tool <- @tools do %>
+                <.tool_item tool={tool} prefix={"#{@prefix}mw-#{:erlang.phash2(@entry.id)}-"} />
+              <% end %>
+            </div>
           </div>
         <% end %>
       </div>
