@@ -1,5 +1,13 @@
 # Changelog
 
+## v0.3.2
+
+### Added
+- Middleware tab now displays the tools provided by each middleware item, with a collapsible tools list showing tool count [#11](https://github.com/sagents-ai/sagents_live_debugger/pull/11)
+
+### Changed
+- Relaxed `sagents` dependency constraint from `~> 0.4.0` to `>= 0.4.0` for greater compatibility with host applications
+
 ## v0.3.1
 
 ### Changed
