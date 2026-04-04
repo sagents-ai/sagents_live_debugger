@@ -1168,6 +1168,21 @@ defmodule SagentsLiveDebugger.Layouts do
       color: white;
     }
 
+    .event-badge-error {
+      background: #dc2626;
+      color: white;
+    }
+
+    .event-item-error {
+      border-color: #fca5a5;
+      background: #fef2f2;
+    }
+
+    .event-summary-error {
+      color: #991b1b;
+      font-weight: 600;
+    }
+
     .event-summary {
       font-size: 0.95rem;
       color: #1f2937;
