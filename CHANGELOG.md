@@ -1,5 +1,15 @@
 # Changelog
 
+## v0.3.4
+
+### Added
+- Error events are now displayed in the agent event stream, making it easier to spot and diagnose failures during agent runs [#14](https://github.com/sagents-ai/sagents_live_debugger/pull/14)
+
+## v0.3.3
+
+### Changed
+- Loosened dependency constraints on `jason`, `mdex`, `lumis`, and `tzdata` (from `~>` to `>=`) so host applications can pin their own compatible versions without conflicts [#13](https://github.com/sagents-ai/sagents_live_debugger/pull/13)
+
 ## v0.3.2
 
 ### Added
