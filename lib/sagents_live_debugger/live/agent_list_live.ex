@@ -420,6 +420,31 @@ defmodule SagentsLiveDebugger.AgentListLive do
     {:noreply, socket}
   end
 
+  # Terminal chain error -- fires once when all retries/fallbacks are exhausted
+  def handle_info({:agent, {:chain_error, error}}, socket) do
+    socket =
+      if socket.assigns.followed_agent_id != nil do
+        add_event_to_stream(socket, {:chain_error, error}, :error)
+      else
+        socket
+      end
+
+    {:noreply, socket}
+  end
+
+  # Transient LLM error -- fires on every individual LLM API call failure
+  # (including retries/fallbacks that may recover)
+  def handle_info({:agent, {:debug, {:llm_error, error}}}, socket) do
+    socket =
+      if socket.assigns.followed_agent_id != nil do
+        add_event_to_stream(socket, {:llm_error, error}, :error)
+      else
+        socket
+      end
+
+    {:noreply, socket}
+  end
+
   # Handler for sub-agent debug events
   # Sub-agent events are wrapped as {:agent, {:debug, {:subagent, sub_agent_id, event}}}
   def handle_info({:agent, {:debug, {:subagent, sub_agent_id, event}}}, socket) do
@@ -1881,7 +1906,7 @@ defmodule SagentsLiveDebugger.AgentListLive do
     assigns = assign(assigns, :toggle_id, toggle_id)
 
     ~H"""
-    <div class="event-item">
+    <div class={["event-item", @event_data.category == :error && "event-item-error"]}>
       <div
         class="event-item-header"
         phx-click={
@@ -1891,9 +1916,21 @@ defmodule SagentsLiveDebugger.AgentListLive do
       >
         <div class="event-item-main">
           <span class={"event-badge event-badge-#{@event_data.category}"}>
-            {if @event_data.category == :debug, do: "Dbg", else: "Std"}
+            <%= case @event_data.category do %>
+              <% :error -> %>
+                Err
+              <% :debug -> %>
+                Dbg
+              <% _ -> %>
+                Std
+            <% end %>
           </span>
-          <span class="event-summary">{@event_data.event.summary}</span>
+          <span class={[
+            "event-summary",
+            @event_data.category == :error && "event-summary-error"
+          ]}>
+            {@event_data.event.summary}
+          </span>
           <%= if Map.has_key?(@event_data.event, :input) do %>
             <span class="event-field-inline">
               <span class="token-input">↑{@event_data.event.input}</span>
@@ -1919,6 +1956,17 @@ defmodule SagentsLiveDebugger.AgentListLive do
             <div class="event-field">
               <span class="event-label">Action:</span>
               <span class="event-value">{@event_data.event.action}</span>
+            </div>
+          <% end %>
+
+          <%= if @event_data.event.type in ["chain_error", "llm_error"] do %>
+            <div class="event-field">
+              <span class="event-label">Error Type:</span>
+              <span class="event-value">{@event_data.event.error_type}</span>
+            </div>
+            <div class="event-field">
+              <span class="event-label">Message:</span>
+              <span class="event-value">{@event_data.event.message}</span>
             </div>
           <% end %>
 
@@ -2338,6 +2386,28 @@ defmodule SagentsLiveDebugger.AgentListLive do
           raw: display_message
         }
 
+      # Terminal chain error -- all retries/fallbacks exhausted
+      {:chain_error, error} ->
+        message = format_error_message(error)
+
+        %{
+          type: "chain_error",
+          error_type: error_type_string(error),
+          message: message,
+          summary: "Chain error: #{message}"
+        }
+
+      # Transient LLM error -- individual API call failure (may be retried)
+      {:llm_error, error} ->
+        message = format_error_message(error)
+
+        %{
+          type: "llm_error",
+          error_type: error_type_string(error),
+          message: message,
+          summary: "LLM error (transient): #{message}"
+        }
+
       # Sub-agent events - wrapped as {:subagent, sub_agent_id, inner_event}
       {:subagent, sub_agent_id, inner_event} ->
         format_subagent_event(sub_agent_id, inner_event)
@@ -2379,6 +2449,13 @@ defmodule SagentsLiveDebugger.AgentListLive do
   end
 
   defp format_interrupt_summary(_), do: "awaiting human input"
+
+  defp format_error_message(%{message: message}) when is_binary(message), do: message
+  defp format_error_message(error), do: inspect(error, limit: 100)
+
+  defp error_type_string(%{type: type}) when is_binary(type), do: type
+  defp error_type_string(%{type: type}) when is_atom(type), do: to_string(type)
+  defp error_type_string(_), do: "unknown"
 
   defp format_action_data(action_data) when is_tuple(action_data) do
     case action_data do
