@@ -1,5 +1,20 @@
 # Changelog
 
+## v0.3.5
+
+### Added
+- Self-contained JavaScript asset serving following the `Phoenix.LiveDashboard` pattern -- the debugger now bundles `phoenix.js`, `phoenix_html.js`, and `phoenix_live_view.js` at compile time and serves them from a cache-busted Plug route, so host applications no longer need to provide LiveView JS assets [#17](https://github.com/sagents-ai/sagents_live_debugger/pull/17)
+- WebSocket-to-LongPoll automatic fallback in the bundled LiveSocket initialization [#17](https://github.com/sagents-ai/sagents_live_debugger/pull/17)
+- `live_socket_path` option in router macro for custom WebSocket paths [#17](https://github.com/sagents-ai/sagents_live_debugger/pull/17)
+
+### Changed
+- Layout split into `root/1` (HTML shell with `<script>`, CSRF meta, `phx-socket`) and `app/1` (passthrough), matching Phoenix conventions for root vs app layouts [#17](https://github.com/sagents-ai/sagents_live_debugger/pull/17)
+- `.btn-primary` and `.btn-secondary` styles promoted to global scope (previously scoped under `.filter-actions`) [#17](https://github.com/sagents-ai/sagents_live_debugger/pull/17)
+
+### Fixed
+- Debugger now works in host applications that don't load Phoenix LiveView JavaScript in their own layout [#17](https://github.com/sagents-ai/sagents_live_debugger/pull/17)
+- Button styles rendering inconsistently outside of filter actions context [#17](https://github.com/sagents-ai/sagents_live_debugger/pull/17)
+
 ## v0.3.4
 
 ### Added
