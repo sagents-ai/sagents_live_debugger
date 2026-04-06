@@ -1219,11 +1219,11 @@ defmodule SagentsLiveDebugger.AgentListLive do
           <h2>Agent Not Found</h2>
           <p>Agent {@selected_agent_id} doesn't appear to be active.</p>
           <p class="text-muted">It may have stopped or completed its work.</p>
-          <button phx-click="back_to_list" class="btn-back">← Back to Agent List</button>
+          <button phx-click="back_to_list" class="btn btn-primary">← Back to Agent List</button>
         </div>
       <% else %>
         <div class="agent-detail-header">
-          <button phx-click="back_to_list" class="btn-back">← Back to List</button>
+          <button phx-click="back_to_list" class="btn btn-primary">← Back to List</button>
           <h2>Agent: {@selected_agent_id}</h2>
         </div>
 

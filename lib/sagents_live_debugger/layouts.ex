@@ -303,18 +303,35 @@ defmodule SagentsLiveDebugger.Layouts do
       color: #1f2937;
     }
 
-    .btn-back {
-      padding: 0.5rem 1rem;
+    .btn-primary {
       background: #6366f1;
       color: white;
-      text-decoration: none;
+      padding: 0.5rem 1rem;
+      border: none;
       border-radius: 0.375rem;
       font-weight: 500;
+      cursor: pointer;
       transition: background 0.2s;
     }
 
-    .btn-back:hover {
+    .btn-primary:hover {
       background: #4f46e5;
+    }
+
+    .btn-secondary {
+      background: white;
+      color: #374151;
+      padding: 0.5rem 1rem;
+      border: 1px solid #d1d5db;
+      border-radius: 0.375rem;
+      font-weight: 500;
+      cursor: pointer;
+      transition: all 0.2s;
+    }
+
+    .btn-secondary:hover {
+      background: #f3f4f6;
+      border-color: #9ca3af;
     }
 
     .auto-refresh {
@@ -1923,36 +1940,6 @@ defmodule SagentsLiveDebugger.Layouts do
       margin-top: 1rem;
     }
 
-    .filter-actions .btn-primary {
-      background: #6366f1;
-      color: white;
-      padding: 0.5rem 1rem;
-      border: none;
-      border-radius: 0.375rem;
-      font-weight: 500;
-      cursor: pointer;
-      transition: background 0.2s;
-    }
-
-    .filter-actions .btn-primary:hover {
-      background: #4f46e5;
-    }
-
-    .filter-actions .btn-secondary {
-      background: white;
-      color: #374151;
-      padding: 0.5rem 1rem;
-      border: 1px solid #d1d5db;
-      border-radius: 0.375rem;
-      font-weight: 500;
-      cursor: pointer;
-      transition: all 0.2s;
-    }
-
-    .filter-actions .btn-secondary:hover {
-      background: #f3f4f6;
-      border-color: #9ca3af;
-    }
 
     .presence-status {
       display: flex;
