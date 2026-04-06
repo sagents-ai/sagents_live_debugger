@@ -2,24 +2,51 @@ defmodule SagentsLiveDebugger.Layouts do
   use Phoenix.Component
   import Phoenix.HTML, only: [raw: 1]
 
-  def app(assigns) do
+  @compile {:no_warn_undefined, Phoenix.VerifiedRoutes}
+
+  def root(assigns) do
     ~H"""
     <!DOCTYPE html>
-    <html lang="en">
+    <html lang="en" phx-socket={live_socket_path(@conn)}>
       <head>
         <meta charset="utf-8" />
         <meta name="viewport" content="width=device-width, initial-scale=1" />
+        <meta name="csrf-token" content={Phoenix.Controller.get_csrf_token()} />
         <title>Agent Debugger</title>
 
         <style>
           <%= raw(css()) %>
         </style>
+
+        <script src={asset_path(@conn, :js)} defer>
+        </script>
       </head>
       <body>
         {@inner_content}
       </body>
     </html>
     """
+  end
+
+  def app(assigns) do
+    ~H"""
+    {@inner_content}
+    """
+  end
+
+  defp live_socket_path(conn) do
+    [Enum.map(conn.script_name, &["/" | &1]) | conn.private.live_socket_path]
+  end
+
+  defp asset_path(conn, :js) do
+    hash = SagentsLiveDebugger.Assets.current_hash(:js)
+    prefix = conn.private.phoenix_router.__sagents_debugger_prefix__()
+
+    Phoenix.VerifiedRoutes.unverified_path(
+      conn,
+      conn.private.phoenix_router,
+      "#{prefix}/js-#{hash}"
+    )
   end
 
   defp css do
