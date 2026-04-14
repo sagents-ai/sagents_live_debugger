@@ -1608,6 +1608,10 @@ defmodule SagentsLiveDebugger.Layouts do
       border-left: 4px solid #ef4444;
     }
 
+    .subagent-entry.status-cancelled {
+      border-left: 4px solid #dc2626;
+    }
+
     .subagent-header {
       display: flex;
       align-items: center;
@@ -1666,6 +1670,37 @@ defmodule SagentsLiveDebugger.Layouts do
     .subagent-status-badge.status-error {
       background: #fee2e2;
       color: #991b1b;
+    }
+
+    /* Cancelled badge deliberately uses a bold solid-red scheme so it is
+       clearly distinct from the pastel running/completed/error states. */
+    .subagent-status-badge.status-cancelled {
+      background: #dc2626;
+      color: #ffffff;
+      text-transform: uppercase;
+      letter-spacing: 0.05em;
+    }
+
+    /* Terminal banner shown at the end of the messages list when an agent or
+       sub-agent was cancelled. Sits alongside the message-item style but is
+       deliberately not styled as a message so it reads as meta-info. */
+    .agent-cancelled-banner {
+      display: flex;
+      align-items: center;
+      gap: 0.5rem;
+      margin: 0.75rem 0;
+      padding: 0.625rem 0.875rem;
+      background: #fee2e2;
+      border: 1px solid #fecaca;
+      border-left: 4px solid #dc2626;
+      border-radius: 4px;
+      color: #991b1b;
+      font-weight: 600;
+      font-size: 0.875rem;
+    }
+
+    .agent-cancelled-banner-icon {
+      font-size: 1rem;
     }
 
     /* Token usage badge */
@@ -1781,6 +1816,31 @@ defmodule SagentsLiveDebugger.Layouts do
     .subagent-error-content {
       background: #fef2f2 !important;
       color: #991b1b;
+    }
+
+    .subagent-error-structured {
+      background: #fef2f2;
+      border: 1px solid #fecaca;
+      border-radius: 4px;
+      padding: 0.5rem 0.75rem;
+      color: #991b1b;
+      font-size: 0.875rem;
+      display: flex;
+      flex-direction: column;
+      gap: 0.25rem;
+    }
+
+    .subagent-error-structured code {
+      background: #fee2e2;
+      padding: 0 0.25rem;
+      border-radius: 2px;
+    }
+
+    .subagent-final-messages {
+      max-height: 20rem;
+      overflow-y: auto;
+      border-left: 3px solid #fecaca;
+      padding-left: 0.5rem;
     }
 
     /* Streaming indicator */

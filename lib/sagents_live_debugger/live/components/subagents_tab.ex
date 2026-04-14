@@ -203,8 +203,32 @@ defmodule SagentsLiveDebugger.Live.Components.SubagentsTab do
       <%= if @subagent.error do %>
         <div class="subagent-config-item">
           <label class="subagent-error-label">Error:</label>
-          <.highlight_code code={inspect_for_display(@subagent.error)} />
+          <%= case @subagent.error do %>
+            <% %LangChain.LangChainError{} = err -> %>
+              <div class="subagent-error-structured">
+                <div>
+                  <strong>Type:</strong>
+                  <code>{err.type || "error"}</code>
+                </div>
+                <div><strong>Message:</strong> {err.message}</div>
+              </div>
+            <% other -> %>
+              <.highlight_code code={inspect_for_display(other)} />
+          <% end %>
         </div>
+
+        <%= if Map.get(@subagent, :final_messages, []) != [] do %>
+          <div class="subagent-config-item">
+            <label class="subagent-error-label">
+              Last {Map.get(@subagent, :failure_turn_count, length(@subagent.final_messages))} message(s) before failure:
+            </label>
+            <div class="subagent-final-messages">
+              <%= for message <- @subagent.final_messages do %>
+                <.message_item message={message} />
+              <% end %>
+            </div>
+          </div>
+        <% end %>
       <% end %>
     </div>
     """
@@ -241,6 +265,13 @@ defmodule SagentsLiveDebugger.Live.Components.SubagentsTab do
         <%= for message <- @subagent.messages do %>
           <.message_item message={message} />
         <% end %>
+      <% end %>
+
+      <%= if @subagent.status == :cancelled do %>
+        <div class="agent-cancelled-banner">
+          <span class="agent-cancelled-banner-icon">🚫</span>
+          <span>Sub-agent cancelled — no further messages will arrive.</span>
+        </div>
       <% end %>
     </div>
     """
@@ -312,6 +343,7 @@ defmodule SagentsLiveDebugger.Live.Components.SubagentsTab do
   defp status_entry_class(:running), do: "status-running"
   defp status_entry_class(:completed), do: "status-completed"
   defp status_entry_class(:interrupted), do: "status-interrupted"
+  defp status_entry_class(:cancelled), do: "status-cancelled"
   defp status_entry_class(:error), do: "status-error"
   defp status_entry_class(_), do: ""
 
@@ -319,6 +351,7 @@ defmodule SagentsLiveDebugger.Live.Components.SubagentsTab do
   defp status_badge_class(:running), do: "status-running"
   defp status_badge_class(:completed), do: "status-completed"
   defp status_badge_class(:interrupted), do: "status-interrupted"
+  defp status_badge_class(:cancelled), do: "status-cancelled"
   defp status_badge_class(:error), do: "status-error"
   defp status_badge_class(_), do: ""
 
@@ -326,6 +359,7 @@ defmodule SagentsLiveDebugger.Live.Components.SubagentsTab do
   defp format_status(:running), do: "Running"
   defp format_status(:completed), do: "Completed"
   defp format_status(:interrupted), do: "Interrupted"
+  defp format_status(:cancelled), do: "Cancelled"
   defp format_status(:error), do: "Error"
   defp format_status(other), do: to_string(other)
 
