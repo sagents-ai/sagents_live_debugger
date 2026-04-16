@@ -478,6 +478,34 @@ defmodule SagentsLiveDebugger.AgentListLive do
     {:noreply, socket}
   end
 
+  # Incremental rolling-state update: patches @agent_state.messages by appending
+  # the new messages, so the Messages tab updates live during a run instead of
+  # only after execute returns. Cheap relative to full-state broadcast.
+  def handle_info(
+        {:agent, {:debug, {:agent_state_messages_appended, new_messages}}},
+        socket
+      ) do
+    socket =
+      if socket.assigns.followed_agent_id != nil do
+        current = socket.assigns.agent_state
+
+        patched =
+          if current do
+            %{current | messages: (current.messages || []) ++ new_messages}
+          else
+            current
+          end
+
+        socket
+        |> assign(:agent_state, patched)
+        |> add_event_to_stream({:agent_state_messages_appended, new_messages}, :debug)
+      else
+        socket
+      end
+
+    {:noreply, socket}
+  end
+
   # Handle agent_state_update debug events (after execution completes)
   # This is the authoritative final state after the agent execution finishes
   def handle_info({:agent, {:debug, {:agent_state_update, new_state}}}, socket) do
@@ -1290,7 +1318,11 @@ defmodule SagentsLiveDebugger.AgentListLive do
                 agent_id={@selected_agent_id}
               />
             <% :messages -> %>
-              <.messages_tab state={@agent_state} agent={@agent_detail} />
+              <.messages_tab
+                state={@agent_state}
+                agent={@agent_detail}
+                agent_status={@agent_metadata && @agent_metadata.status}
+              />
             <% :middleware -> %>
               <.middleware_tab agent={@agent_detail} />
             <% :tools -> %>
@@ -1817,6 +1849,8 @@ defmodule SagentsLiveDebugger.AgentListLive do
 
   # Messages Tab
   defp messages_tab(assigns) do
+    assigns = assign_new(assigns, :agent_status, fn -> nil end)
+
     ~H"""
     <div class="messages-tab">
       <%= if @state && @state.messages do %>
@@ -1836,6 +1870,13 @@ defmodule SagentsLiveDebugger.AgentListLive do
             <%= for {message, index} <- Enum.with_index(@state.messages) do %>
               <.message_item message={message} index={index} />
             <% end %>
+          </div>
+        <% end %>
+
+        <%= if @agent_status == :cancelled do %>
+          <div class="agent-cancelled-banner">
+            <span class="agent-cancelled-banner-icon">🚫</span>
+            <span>Agent cancelled — execution stopped before completion.</span>
           </div>
         <% end %>
       <% else %>
@@ -2520,6 +2561,24 @@ defmodule SagentsLiveDebugger.AgentListLive do
     }
   end
 
+  defp format_subagent_event(sub_agent_id, {:subagent_failed_with_context, ctx}) do
+    %{
+      type: "subagent_failed_with_context",
+      sub_agent_id: sub_agent_id,
+      turn_count: ctx[:turn_count] || 0,
+      error: inspect(ctx[:error], limit: 100),
+      summary: "SubAgent #{short_id(sub_agent_id)} failed after #{ctx[:turn_count] || 0} turn(s)"
+    }
+  end
+
+  defp format_subagent_event(sub_agent_id, {:subagent_cancelled, _ctx}) do
+    %{
+      type: "subagent_cancelled",
+      sub_agent_id: sub_agent_id,
+      summary: "SubAgent #{short_id(sub_agent_id)} cancelled"
+    }
+  end
+
   defp format_subagent_event(sub_agent_id, {:subagent_llm_message, message}) do
     role = message.role || :unknown
 
@@ -2754,6 +2813,28 @@ defmodule SagentsLiveDebugger.AgentListLive do
 
   defp handle_subagent_event(socket, sub_agent_id, {:subagent_error, reason}) do
     update_subagent(socket, sub_agent_id, %{status: :error, error: reason})
+  end
+
+  # Structured failure: carries the final chain messages and turn count so the
+  # SubAgents tab can render "Last N messages before failure" alongside the
+  # error. The preceding :subagent_error event already set status/error; this
+  # event adds context.
+  defp handle_subagent_event(socket, sub_agent_id, {:subagent_failed_with_context, ctx}) do
+    update_subagent(socket, sub_agent_id, %{
+      status: :error,
+      error: ctx[:error],
+      final_messages: ctx[:final_messages] || [],
+      failure_turn_count: ctx[:turn_count] || 0
+    })
+  end
+
+  # Sub-agent cancelled because parent agent was cancelled.
+  # Only set status. The ctx from the fallback broadcast path (sub-agent was
+  # blocked in an LLM call) carries no messages; writing empty defaults would
+  # wipe out the messages this LiveView already accumulated from per-turn
+  # :subagent_llm_message events.
+  defp handle_subagent_event(socket, sub_agent_id, {:subagent_cancelled, _ctx}) do
+    update_subagent(socket, sub_agent_id, %{status: :cancelled})
   end
 
   # Catch-all for unhandled subagent events
