@@ -1,5 +1,20 @@
 # Changelog
 
+## v0.3.6
+
+### Added
+- Live message updates during multi-turn agent runs - the Messages tab now streams `:agent_state_messages_appended` events and patches messages turn-by-turn instead of waiting for the final `:agent_state_update` [#19](https://github.com/sagents-ai/sagents_live_debugger/pull/19)
+- Cancelled agent state handling with a red "Agent cancelled" banner at the end of the messages list, a `status-cancelled` badge in the SubAgents tab, and a dedicated `handle_subagent_event/3` clause that preserves streamed messages when a context-less cancellation broadcast arrives [#19](https://github.com/sagents-ai/sagents_live_debugger/pull/19)
+- Structured rendering of `%LangChain.LangChainError{}` sub-agent failures (context length exceeded, `:length` stops, etc.) with a clean type + message view instead of a raw `inspect` blob [#19](https://github.com/sagents-ai/sagents_live_debugger/pull/19)
+- `:subagent_failed_with_context` event handler that renders "Last N message(s) before failure" alongside the structured error [#19](https://github.com/sagents-ai/sagents_live_debugger/pull/19)
+- `.github/dependabot.yml` for weekly GitHub Actions updates with a 7-day cooldown [#19](https://github.com/sagents-ai/sagents_live_debugger/pull/19)
+
+### Changed
+- CI workflow hardened per zizmor recommendations: `actions/checkout`, `erlef/setup-beam`, and `actions/cache` pinned to commit SHAs with version comments, and `persist-credentials: false` set on checkout [#19](https://github.com/sagents-ai/sagents_live_debugger/pull/19)
+
+### Fixed
+- Lumis compiler warning resolved by moving the `:language` option into the `{:html_inline, ...}` formatter tuple in `core_components.ex` to match the current Lumis formatter signature [#19](https://github.com/sagents-ai/sagents_live_debugger/pull/19)
+
 ## v0.3.5
 
 ### Added
