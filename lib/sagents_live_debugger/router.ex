@@ -1,6 +1,39 @@
 defmodule SagentsLiveDebugger.Router do
   @moduledoc """
   Router macro for mounting the debugger in a Phoenix application.
+
+  ## Options
+
+    * `:coordinator` (required) - The coordinator module for managing agent sessions.
+
+    * `:presence_module` - Optional presence module for real-time viewer updates.
+
+    * `:live_socket_path` - Configures the socket path. Must match the
+      `socket "/live", Phoenix.LiveView.Socket` in your endpoint.
+      Defaults to `"/live"`.
+
+    * `:csp_nonce_assign_key` - An assign key to find the CSP nonce value
+      used for assets. Supports either `atom()` (used for both script and
+      style nonces) or a map of type
+      `%{optional(:script) => atom(), optional(:style) => atom()}`.
+
+  ## Examples
+
+      import SagentsLiveDebugger.Router
+
+      scope "/dev" do
+        pipe_through :browser
+
+        sagents_live_debugger "/debug/agents",
+          coordinator: MyApp.Coordinator,
+          presence_module: MyAppWeb.Presence
+      end
+
+  With CSP nonces:
+
+      sagents_live_debugger "/debug/agents",
+        coordinator: MyApp.Coordinator,
+        csp_nonce_assign_key: :csp_nonce
   """
 
   defmacro sagents_live_debugger(path, opts \\ []) do
@@ -19,19 +52,28 @@ defmodule SagentsLiveDebugger.Router do
           # Optional: custom live socket path (defaults to "/live")
           live_socket_path = Keyword.get(opts, :live_socket_path, "/live")
 
+          # Optional: CSP nonce assign key for strict CSP environments
+          csp_nonce_assign_key =
+            case Keyword.get(opts, :csp_nonce_assign_key) do
+              nil -> nil
+              key when is_atom(key) -> %{style: key, script: key}
+              %{} = keys -> Map.take(keys, [:style, :script])
+            end
+
           live_session :sagents_debugger,
-            session: %{
-              "coordinator" => coordinator,
-              "presence_module" => presence_module
-            },
+            session: {SagentsLiveDebugger.Router, :__session__, [coordinator, presence_module]},
             on_mount: [SagentsLiveDebugger.SessionConfig],
             root_layout: {SagentsLiveDebugger.Layouts, :root},
             layout: {SagentsLiveDebugger.Layouts, :app} do
-            # Self-contained JS asset route (cache-busted via MD5 hash)
+            # Self-contained asset routes (cache-busted via MD5 hash)
+            get "/css-:md5", SagentsLiveDebugger.Assets, :css, as: :sagents_debugger_asset
             get "/js-:md5", SagentsLiveDebugger.Assets, :js, as: :sagents_debugger_asset
 
             live "/", SagentsLiveDebugger.AgentListLive, :home,
-              private: %{live_socket_path: live_socket_path}
+              private: %{
+                live_socket_path: live_socket_path,
+                csp_nonce_assign_key: csp_nonce_assign_key
+              }
           end
         end
       end
@@ -45,5 +87,11 @@ defmodule SagentsLiveDebugger.Router do
         def __sagents_debugger_prefix__, do: @sagents_debugger_prefix
       end
     end
+  end
+
+  @doc false
+  def __session__(conn, coordinator, presence_module) do
+    _ = conn
+    %{"coordinator" => coordinator, "presence_module" => presence_module}
   end
 end
