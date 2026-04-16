@@ -474,8 +474,7 @@ defmodule SagentsLiveDebugger.CoreComponents do
   defp highlight_with_lumis(code, language) when is_binary(code) do
     # Themes: dracula, onedark, material_oceanic
     Lumis.highlight!(code,
-      language: language,
-      formatter: {:html_inline, theme: "material_oceanic"}
+      formatter: {:html_inline, language: language, theme: "material_oceanic"}
     )
   rescue
     _ ->
