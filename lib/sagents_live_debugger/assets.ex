@@ -1,16 +1,22 @@
 defmodule SagentsLiveDebugger.Assets do
   @moduledoc false
 
-  # Plug that serves self-contained LiveView JavaScript for the debugger.
+  # Plug that serves self-contained CSS and JavaScript for the debugger.
   #
-  # At compile time, this module reads and concatenates the pre-built JS files
-  # from phoenix, phoenix_html, and phoenix_live_view dependencies, plus a
-  # small LiveSocket initialization script. The result is served via a Plug
-  # route with cache-busting MD5 hash in the URL.
+  # At compile time, this module reads the debugger CSS file and concatenates
+  # the pre-built JS files from phoenix, phoenix_html, and phoenix_live_view
+  # dependencies, plus a small LiveSocket initialization script. Assets are
+  # served via Plug routes with cache-busting MD5 hashes in the URL.
   #
   # This follows the same pattern as Phoenix.LiveDashboard.Assets.
 
   import Plug.Conn
+
+  # Read CSS at compile time
+  css_path = Path.join(:code.priv_dir(:sagents_live_debugger), "static/debugger.css")
+  @external_resource css_path
+  @css File.read!(css_path)
+  @css_hash Base.encode16(:crypto.hash(:md5, @css), case: :lower)
 
   # Read Phoenix dependency JS files at compile time
   phoenix_js_paths =
@@ -29,7 +35,13 @@ defmodule SagentsLiveDebugger.Assets do
     var socketPath = document.querySelector("html").getAttribute("phx-socket") || "/live";
     var csrfToken = document.querySelector("meta[name='csrf-token']").getAttribute("content");
     var liveSocket = new LiveView.LiveSocket(socketPath, Phoenix.Socket, {
-      params: function() { return {_csrf_token: csrfToken}; }
+      params: function() {
+        var tz = "UTC";
+        try {
+          tz = Intl.DateTimeFormat().resolvedOptions().timeZone || "UTC";
+        } catch (e) {}
+        return {_csrf_token: csrfToken, time_zone: tz};
+      }
     });
 
     // Attempt WebSocket first, fall back to long polling on connection error
@@ -63,7 +75,7 @@ defmodule SagentsLiveDebugger.Assets do
 
   @js_hash Base.encode16(:crypto.hash(:md5, @js), case: :lower)
 
-  def init(asset) when asset in [:js], do: asset
+  def init(asset) when asset in [:js, :css], do: asset
 
   def call(conn, :js) do
     conn
@@ -74,8 +86,18 @@ defmodule SagentsLiveDebugger.Assets do
     |> halt()
   end
 
+  def call(conn, :css) do
+    conn
+    |> put_resp_header("content-type", "text/css")
+    |> put_resp_header("cache-control", "public, max-age=31536000, immutable")
+    |> put_private(:plug_skip_csrf_protection, true)
+    |> send_resp(200, @css)
+    |> halt()
+  end
+
   @doc """
-  Returns the current MD5 hash for the JS bundle.
+  Returns the current MD5 hash for the given asset bundle.
   """
   def current_hash(:js), do: @js_hash
+  def current_hash(:css), do: @css_hash
 end

@@ -4,12 +4,23 @@ defmodule SagentsLiveDebugger.SessionConfig do
   """
   import Phoenix.Component, only: [assign: 3]
 
+  alias SagentsLiveDebugger.Timezone
+
   def on_mount(:default, _params, session, socket) do
     coordinator = session["coordinator"]
     presence_module = session["presence_module"]
 
-    # Try to get timezone from connect_params as fallback
-    user_timezone = get_timezone_from_params(socket) || "UTC"
+    # Browser timezone arrives via LiveSocket connect_params (see Assets.@init_js).
+    # Validate against Tzdata so a bogus/unknown zone can't break downstream
+    # DateTime.shift_zone/3 calls when formatting event timestamps.
+    user_timezone =
+      socket
+      |> Phoenix.LiveView.get_connect_params()
+      |> case do
+        %{"time_zone" => tz} -> tz
+        _ -> nil
+      end
+      |> Timezone.validate_or_utc()
 
     socket =
       socket
@@ -18,12 +29,5 @@ defmodule SagentsLiveDebugger.SessionConfig do
       |> assign(:user_timezone, user_timezone)
 
     {:cont, socket}
-  end
-
-  defp get_timezone_from_params(socket) do
-    case Phoenix.LiveView.get_connect_params(socket) do
-      %{"time_zone" => tz} when is_binary(tz) -> tz
-      _ -> nil
-    end
   end
 end
