@@ -83,6 +83,7 @@ defmodule SagentsLiveDebugger.MixProject do
     [
       files: [
         "lib",
+        "priv",
         ".formatter.exs",
         "mix.exs",
         "README*",
