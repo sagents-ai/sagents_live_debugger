@@ -35,7 +35,13 @@ defmodule SagentsLiveDebugger.Assets do
     var socketPath = document.querySelector("html").getAttribute("phx-socket") || "/live";
     var csrfToken = document.querySelector("meta[name='csrf-token']").getAttribute("content");
     var liveSocket = new LiveView.LiveSocket(socketPath, Phoenix.Socket, {
-      params: function() { return {_csrf_token: csrfToken}; }
+      params: function() {
+        var tz = "UTC";
+        try {
+          tz = Intl.DateTimeFormat().resolvedOptions().timeZone || "UTC";
+        } catch (e) {}
+        return {_csrf_token: csrfToken, time_zone: tz};
+      }
     });
 
     // Attempt WebSocket first, fall back to long polling on connection error

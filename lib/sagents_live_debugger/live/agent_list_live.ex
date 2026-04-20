@@ -599,21 +599,6 @@ defmodule SagentsLiveDebugger.AgentListLive do
     {:noreply, push_patch(socket, to: base_path)}
   end
 
-  # Handle timezone from phx-click with phx-value-timezone
-  def handle_event("set_timezone", %{"timezone" => timezone}, socket) do
-    case validate_timezone(timezone) do
-      {:ok, validated_tz} ->
-        {:noreply, assign(socket, :user_timezone, validated_tz)}
-
-      {:error, _reason} ->
-        {:noreply, socket}
-    end
-  end
-
-  def handle_event("set_timezone", _params, socket) do
-    {:noreply, socket}
-  end
-
   # Toggle auto-follow first agent
   def handle_event("toggle_auto_follow", _params, socket) do
     {:noreply, assign(socket, :auto_follow_first, !socket.assigns.auto_follow_first)}
@@ -1042,32 +1027,6 @@ defmodule SagentsLiveDebugger.AgentListLive do
 
   def render(assigns) do
     ~H"""
-    <!-- Hidden button for timezone submission -->
-    <button id="sagents-tz-btn" phx-click="set_timezone" style="display: none;"></button>
-
-    <!-- Timezone detection script - phx-update="ignore" prevents re-execution -->
-    <div phx-update="ignore" id="sagents-tz-script-container">
-      <script>
-        (function() {
-          // Listen for every phx:page-loading-stop (initial load AND reconnects)
-          window.addEventListener('phx:page-loading-stop', function() {
-            // Use requestAnimationFrame + setTimeout for reliable timing
-            // RAF ensures we're past the current render, setTimeout adds buffer for LiveView bindings
-            requestAnimationFrame(function() {
-              setTimeout(function() {
-                const tz = Intl.DateTimeFormat().resolvedOptions().timeZone || 'UTC';
-                const btn = document.getElementById('sagents-tz-btn');
-                if (btn) {
-                  btn.setAttribute('phx-value-timezone', tz);
-                  btn.click();
-                }
-              }, 100);
-            });
-          });
-        })();
-      </script>
-    </div>
-
     <!-- Self-contained TimeAgo script - updates relative times client-side -->
     <div phx-update="ignore" id="sagents-time-ago-script-container">
       <script>
@@ -2706,15 +2665,6 @@ defmodule SagentsLiveDebugger.AgentListLive do
       socket
     end
   end
-
-  defp validate_timezone(timezone) when is_binary(timezone) do
-    case DateTime.shift_zone(DateTime.utc_now(), timezone, Tzdata.TimeZoneDatabase) do
-      {:ok, _} -> {:ok, timezone}
-      {:error, _} -> {:error, :invalid_timezone}
-    end
-  end
-
-  defp validate_timezone(_), do: {:error, :invalid_timezone}
 
   ## Sub-Agent Event Handling and State Management
 
