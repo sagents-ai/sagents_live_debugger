@@ -1891,7 +1891,7 @@ td {
 
 .filter-fields {
   display: grid;
-  grid-template-columns: repeat(auto-fit, minmax(200px, 1fr));
+  grid-template-columns: repeat(auto-fit, minmax(min(220px, 100%), 1fr));
   gap: 1rem;
   margin-bottom: 1rem;
 }
@@ -1900,6 +1900,7 @@ td {
   display: flex;
   flex-direction: column;
   gap: 0.25rem;
+  min-width: 0;
 }
 
 .filter-field label {
@@ -1909,11 +1910,14 @@ td {
 }
 
 .filter-field input {
+  width: 100%;
+  box-sizing: border-box;
   padding: 0.5rem 0.75rem;
   border: 1px solid #d1d5db;
   border-radius: 0.375rem;
   font-size: 0.875rem;
   background: white;
+  min-width: 0;
 }
 
 .filter-field input:focus {
@@ -1930,21 +1934,35 @@ td {
 
 .custom-scope-inputs {
   display: flex;
+  flex-wrap: wrap;
   gap: 0.5rem;
 }
 
-.custom-scope-inputs .scope-key {
-  flex: 1;
-}
-
+.custom-scope-inputs .scope-key,
 .custom-scope-inputs .scope-value {
-  flex: 1;
+  flex: 1 1 120px;
+  min-width: 0;
 }
 
 .filter-actions {
   display: flex;
+  flex-wrap: wrap;
   gap: 0.75rem;
   margin-top: 1rem;
+}
+
+.filter-actions .btn {
+  flex: 0 1 auto;
+}
+
+@media (max-width: 640px) {
+  .filter-config {
+    padding: 1rem;
+  }
+
+  .filter-actions .btn {
+    flex: 1 1 140px;
+  }
 }
 
 
