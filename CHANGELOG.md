@@ -1,5 +1,17 @@
 # Changelog
 
+## v0.3.7
+
+### Added
+- `:csp_nonce_assign_key` router option for mounting the debugger under a strict Content Security Policy. Accepts either a single atom (used for both script and style nonces) or a `%{script: atom, style: atom}` map, matching the `Phoenix.LiveDashboard` convention. The emitted `<link>` and `<script>` tags in the root layout now include the corresponding `nonce` attribute [#23](https://github.com/sagents-ai/sagents_live_debugger/pull/23)
+- Self-contained CSS asset serving: the ~2060-line stylesheet was extracted from the inline `<style>` block into `priv/static/debugger.css` and is served from a cache-busted `/css-:md5` Plug route alongside the existing JS bundle, with `public, max-age=31536000, immutable` headers [#23](https://github.com/sagents-ai/sagents_live_debugger/pull/23)
+- New `SagentsLiveDebugger.Timezone` module with `validate/1` and `validate_or_utc/1`, backed by `Tzdata`, so browser-supplied zones can never crash `DateTime.shift_zone/3` when rendering event timestamps [#23](https://github.com/sagents-ai/sagents_live_debugger/pull/23)
+
+### Changed
+- Browser timezone is now read from the LiveSocket `connect_params` at mount time (pushed by the bundled LiveSocket init script) and validated in `SessionConfig.on_mount/4`, replacing the previous hidden-button + `phx:page-loading-stop` JS round-trip [#23](https://github.com/sagents-ai/sagents_live_debugger/pull/23)
+- `live_session :sagents_debugger` now uses the MFA session form (`{SagentsLiveDebugger.Router, :__session__, [...]}`) instead of a static map, keeping session resolution lazy [#23](https://github.com/sagents-ai/sagents_live_debugger/pull/23)
+- Removed the inline `<style>` block, the hidden `#sagents-tz-btn` button, the `set_timezone` event handler, and the private `validate_timezone/1` helper from `AgentListLive`, all superseded by the new asset route and `Timezone` module [#23](https://github.com/sagents-ai/sagents_live_debugger/pull/23)
+
 ## v0.3.6
 
 ### Added

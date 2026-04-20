@@ -69,6 +69,8 @@ The `sagents_live_debugger` macro accepts the following options:
 ### Optional
 
 - `:presence_module` - Phoenix Presence module for real-time agent discovery and viewer tracking
+- `:live_socket_path` - Custom LiveView socket path. Defaults to `"/live"`. Must match the `socket "/live", Phoenix.LiveView.Socket` declaration in your endpoint
+- `:csp_nonce_assign_key` - Assign key(s) for CSP nonces, used when mounting the debugger inside a host application with a strict Content Security Policy. See [Content Security Policy](#content-security-policy) below
 
 ### Example with All Options
 
@@ -77,6 +79,53 @@ sagents_live_debugger "/debug/agents",
   coordinator: MyApp.Agents.Coordinator,
   presence_module: MyApp.Presence
 ```
+
+### Content Security Policy
+
+If your host application enforces a strict CSP that disallows inline/unsafe sources, pass `:csp_nonce_assign_key` so the debugger can stamp the correct nonce onto the bundled `<link rel="stylesheet">` and `<script>` tags it emits in the root layout.
+
+The option accepts either a single atom (used as the nonce for both style and script tags) or a map with `:script` and `:style` keys when you want to use distinct nonces per directive:
+
+```elixir
+# Single nonce for both style and script
+sagents_live_debugger "/debug/agents",
+  coordinator: AgentsDemo.Agents.Coordinator,
+  presence_module: AgentsDemoWeb.Presence,
+  csp_nonce_assign_key: :csp_nonce
+
+# Distinct nonces per directive
+sagents_live_debugger "/debug/agents",
+  csp_nonce_assign_key: %{
+    style: :style_src_nonce,
+    script: :script_src_nonce
+  },
+  coordinator: AgentsDemo.Agents.Coordinator,
+  presence_module: AgentsDemoWeb.Presence
+```
+
+Your browser pipeline (or a plug earlier in the stack) is responsible for generating the nonce values and placing them on `conn.assigns` under the keys you supply — the debugger only reads them:
+
+```elixir
+# Example plug in your browser pipeline
+defmodule MyAppWeb.CSPNonce do
+  import Plug.Conn
+
+  def init(_), do: nil
+
+  def call(conn, _) do
+    conn
+    |> assign(:style_src_nonce, generate_nonce())
+    |> assign(:script_src_nonce, generate_nonce())
+    |> put_resp_header("content-security-policy",
+      "style-src 'nonce-#{conn.assigns.style_src_nonce}'; " <>
+      "script-src 'nonce-#{conn.assigns.script_src_nonce}'")
+  end
+
+  defp generate_nonce, do: 18 |> :crypto.strong_rand_bytes() |> Base.url_encode64(padding: false)
+end
+```
+
+The debugger serves its CSS and JS from cache-busted Plug routes (`/css-<md5>` and `/js-<md5>`), so with nonces wired through there are no inline assets to whitelist separately.
 
 ## Key Features
 
@@ -178,10 +227,10 @@ See the tools a sub-agent has access to in order to do its work.
 ### Plugin Design
 
 The debugger is designed as a self-contained plugin library:
-- No JavaScript files to compile or bundle
-- All CSS is inlined in the layout
-- All JavaScript is inlined for timezone detection
-- Zero configuration beyond adding to router
+- No JavaScript or CSS files for the host application to compile or bundle
+- CSS and JS are read at compile time and served from cache-busted Plug routes (`/css-<md5>`, `/js-<md5>`) with long-lived immutable cache headers, mirroring the `Phoenix.LiveDashboard` pattern
+- Browser timezone is pushed through the LiveSocket `connect_params` on connect and validated server-side against `Tzdata`
+- Zero configuration beyond adding to the router, with optional CSP nonce support for strict-CSP host apps
 
 ### Event-Driven Architecture
 
