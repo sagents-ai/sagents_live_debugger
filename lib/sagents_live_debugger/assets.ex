@@ -69,9 +69,85 @@ defmodule SagentsLiveDebugger.Assets do
   })();
   """
 
+  @time_ago_js """
+  (function() {
+    if (window.__sagentsTimeAgoInitialized) return;
+    window.__sagentsTimeAgoInitialized = true;
+
+    var UPDATE_INTERVAL_MS = 2000;
+    var intervalId = null;
+
+    function formatTimeAgo(isoTimestamp) {
+      if (!isoTimestamp) return '—';
+      var now = new Date();
+      var then = new Date(isoTimestamp);
+      var diffSeconds = Math.floor((now - then) / 1000);
+
+      if (diffSeconds < 0) return 'Just now';
+      if (diffSeconds < 5) return 'Just now';
+      if (diffSeconds < 60) return diffSeconds + ' seconds ago';
+      if (diffSeconds < 3600) {
+        var mins = Math.floor(diffSeconds / 60);
+        return mins + (mins === 1 ? ' minute ago' : ' minutes ago');
+      }
+      if (diffSeconds < 86400) {
+        var hours = Math.floor(diffSeconds / 3600);
+        return hours + (hours === 1 ? ' hour ago' : ' hours ago');
+      }
+      var days = Math.floor(diffSeconds / 86400);
+      return days + (days === 1 ? ' day ago' : ' days ago');
+    }
+
+    function formatDuration(isoTimestamp) {
+      if (!isoTimestamp) return '—';
+      var now = new Date();
+      var start = new Date(isoTimestamp);
+      var ms = now - start;
+
+      if (ms < 0) return '0s';
+
+      var seconds = Math.floor(ms / 1000);
+      var minutes = Math.floor(seconds / 60);
+      var hours = Math.floor(minutes / 60);
+
+      if (hours > 0) return hours + 'h ' + (minutes % 60) + 'm';
+      if (minutes > 0) return minutes + 'm ' + (seconds % 60) + 's';
+      return seconds + 's';
+    }
+
+    function updateTimeElements() {
+      document.querySelectorAll('[data-time-ago]').forEach(function(el) {
+        var timestamp = el.getAttribute('data-time-ago');
+        if (timestamp) el.textContent = formatTimeAgo(timestamp);
+      });
+
+      document.querySelectorAll('[data-duration-since]').forEach(function(el) {
+        var timestamp = el.getAttribute('data-duration-since');
+        if (timestamp) el.textContent = formatDuration(timestamp);
+      });
+    }
+
+    function startUpdates() {
+      updateTimeElements();
+      if (!intervalId) {
+        intervalId = setInterval(updateTimeElements, UPDATE_INTERVAL_MS);
+      }
+    }
+
+    if (document.readyState === 'loading') {
+      document.addEventListener('DOMContentLoaded', startUpdates);
+    } else {
+      requestAnimationFrame(function() { setTimeout(startUpdates, 50); });
+    }
+
+    window.addEventListener('phx:update', function() { setTimeout(updateTimeElements, 50); });
+    window.addEventListener('phx:page-loading-stop', function() { setTimeout(startUpdates, 100); });
+  })();
+  """
+
   @js Enum.map_join(phoenix_js_paths, "\n", fn path ->
         path |> File.read!() |> String.replace("//# sourceMappingURL=", "// ")
-      end) <> "\n" <> @init_js
+      end) <> "\n" <> @init_js <> "\n" <> @time_ago_js
 
   @js_hash Base.encode16(:crypto.hash(:md5, @js), case: :lower)
 
