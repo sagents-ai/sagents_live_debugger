@@ -8,6 +8,7 @@ defmodule SagentsLiveDebugger.SessionConfig do
 
   def on_mount(:default, _params, session, socket) do
     coordinator = session["coordinator"]
+    pubsub = session["pubsub"]
     presence_module = session["presence_module"]
 
     # Browser timezone arrives via LiveSocket connect_params (see Assets.@init_js).
@@ -25,6 +26,7 @@ defmodule SagentsLiveDebugger.SessionConfig do
     socket =
       socket
       |> assign(:coordinator, coordinator)
+      |> assign(:pubsub, pubsub)
       |> assign(:presence_module, presence_module)
       |> assign(:user_timezone, user_timezone)
 

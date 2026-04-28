@@ -6,6 +6,11 @@ defmodule SagentsLiveDebugger.Router do
 
     * `:coordinator` (required) - The coordinator module for managing agent sessions.
 
+    * `:pubsub` (required) - The `Phoenix.PubSub` instance the host application
+      uses to broadcast agent and presence events. The debugger subscribes to
+      `Sagents.Subscriber.presence_topic/0` and to per-conversation viewer
+      presence topics on this PubSub.
+
     * `:presence_module` - Optional presence module for real-time viewer updates.
 
     * `:live_socket_path` - Configures the socket path. Must match the
@@ -26,6 +31,7 @@ defmodule SagentsLiveDebugger.Router do
 
         sagents_live_debugger "/debug/agents",
           coordinator: MyApp.Coordinator,
+          pubsub: MyApp.PubSub,
           presence_module: MyAppWeb.Presence
       end
 
@@ -33,6 +39,7 @@ defmodule SagentsLiveDebugger.Router do
 
       sagents_live_debugger "/debug/agents",
         coordinator: MyApp.Coordinator,
+        pubsub: MyApp.PubSub,
         csp_nonce_assign_key: :csp_nonce
   """
 
@@ -45,6 +52,7 @@ defmodule SagentsLiveDebugger.Router do
 
           # Extract and validate required configuration
           coordinator = Keyword.fetch!(opts, :coordinator)
+          pubsub = Keyword.fetch!(opts, :pubsub)
 
           # Optional: Presence tracking for real-time viewer updates
           presence_module = Keyword.get(opts, :presence_module)
@@ -61,7 +69,7 @@ defmodule SagentsLiveDebugger.Router do
             end
 
           live_session :sagents_debugger,
-            session: {SagentsLiveDebugger.Router, :__session__, [coordinator, presence_module]},
+            session: {SagentsLiveDebugger.Router, :__session__, [coordinator, pubsub, presence_module]},
             on_mount: [SagentsLiveDebugger.SessionConfig],
             root_layout: {SagentsLiveDebugger.Layouts, :root},
             layout: {SagentsLiveDebugger.Layouts, :app} do
@@ -90,8 +98,13 @@ defmodule SagentsLiveDebugger.Router do
   end
 
   @doc false
-  def __session__(conn, coordinator, presence_module) do
+  def __session__(conn, coordinator, pubsub, presence_module) do
     _ = conn
-    %{"coordinator" => coordinator, "presence_module" => presence_module}
+
+    %{
+      "coordinator" => coordinator,
+      "pubsub" => pubsub,
+      "presence_module" => presence_module
+    }
   end
 end

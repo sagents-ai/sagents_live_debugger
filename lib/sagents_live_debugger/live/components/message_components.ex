@@ -373,9 +373,14 @@ defmodule SagentsLiveDebugger.Live.Components.MessageComponents do
   def middleware_item(assigns) do
     prefix = assigns[:prefix] || ""
 
-    # Filter out agent_id and model from config
-    config_without_special = Map.drop(assigns.entry.config, [:agent_id, :model])
+    # Model is rendered separately by middleware_model_config/1 — it's small and
+    # already handled regardless of whether the middleware exposes a debug_summary.
     model = Map.get(assigns.entry.config, :model)
+
+    # The main config display: prefer the middleware's own debug_summary/1 when
+    # exported, otherwise fall back to the raw config (with agent_id/model
+    # stripped, since they're either internal or rendered separately above).
+    display = display_config(assigns.entry)
 
     # Generate unique IDs for this middleware item
     middleware_id = "#{prefix}middleware-#{:erlang.phash2(assigns.entry.id)}"
@@ -383,7 +388,7 @@ defmodule SagentsLiveDebugger.Live.Components.MessageComponents do
 
     assigns =
       assigns
-      |> assign(:config_without_special, config_without_special)
+      |> assign(:display, display)
       |> assign(:model, model)
       |> assign(:middleware_id, middleware_id)
       |> assign(:toggle_id, toggle_id)
@@ -408,13 +413,7 @@ defmodule SagentsLiveDebugger.Live.Components.MessageComponents do
           <.middleware_model_config model={@model} entry_id={@entry.id} prefix={@prefix} />
         <% end %>
 
-        <%= if map_size(@config_without_special) > 0 do %>
-          <div class="middleware-config">
-            <%= for {key, value} <- @config_without_special do %>
-              <.middleware_config_entry key={key} value={value} />
-            <% end %>
-          </div>
-        <% end %>
+        <.middleware_config_display display={@display} />
 
         <%= if @tools != [] do %>
           <div class="middleware-tools">
@@ -431,6 +430,68 @@ defmodule SagentsLiveDebugger.Live.Components.MessageComponents do
       </div>
     </div>
     """
+  end
+
+  @doc """
+  Renders the middleware config display, dispatching on the shape of the
+  payload returned by `display_config/1`.
+
+  Multi-clause function components let us pick the template at compile time
+  via pattern matching, instead of a runtime `case` inside HEEx.
+  """
+  attr :display, :any, required: true
+
+  def middleware_config_display(%{display: {:map, config_map}} = assigns)
+      when map_size(config_map) > 0 do
+    assigns = assign(assigns, :config_map, config_map)
+
+    ~H"""
+    <div class="middleware-config">
+      <%= for {key, value} <- @config_map do %>
+        <.middleware_config_entry key={key} value={value} />
+      <% end %>
+    </div>
+    """
+  end
+
+  def middleware_config_display(%{display: {:string, text}} = assigns)
+      when is_binary(text) and text != "" do
+    assigns = assign(assigns, :text, text)
+
+    ~H"""
+    <div class="middleware-config">
+      <.highlight_code code={@text} />
+    </div>
+    """
+  end
+
+  def middleware_config_display(assigns), do: ~H""
+
+  @doc """
+  Build the display payload for a middleware's config section.
+
+  Returns:
+
+    * `{:map, map}` — render as a key/value config table
+    * `{:string, text}` — render as a single highlighted code block
+
+  Prefers the middleware module's own `c:Sagents.Middleware.debug_summary/1`
+  callback when exported. The callback owns the decision of what's useful to
+  surface; falling back to the raw config is the safe default for middleware
+  that hasn't opted in.
+  """
+  def display_config(%Sagents.MiddlewareEntry{module: module, config: config}) do
+    if Code.ensure_loaded?(module) and function_exported?(module, :debug_summary, 1) do
+      case module.debug_summary(config) do
+        result when is_map(result) ->
+          {:map, Map.drop(result, [:agent_id, :model])}
+
+        result when is_binary(result) ->
+          {:string, result}
+      end
+    else
+      {:map, Map.drop(config, [:agent_id, :model])}
+    end
   end
 
   @doc """
@@ -520,11 +581,24 @@ defmodule SagentsLiveDebugger.Live.Components.MessageComponents do
 
   # Helper functions - public so they can be used by importers
 
+  @inspect_limit 200
+  @inspect_printable_limit 16_384
+
   @doc """
   Inspect values for debug display.
+
+  Uses bounded `:limit` and `:printable_limit` so that an unexpectedly large
+  middleware config (or any other value) cannot dominate render time and DOM
+  size. Middleware modules that hold large structures should implement
+  `c:Sagents.Middleware.debug_summary/1` to provide a curated view; this
+  function is the safety net for everything else.
   """
   def inspect_for_display(value) do
-    inspect(value, pretty: true, limit: :infinity, printable_limit: :infinity)
+    inspect(value,
+      pretty: true,
+      limit: @inspect_limit,
+      printable_limit: @inspect_printable_limit
+    )
   end
 
   def message_role_emoji(:system), do: "⚙️"
