@@ -41,7 +41,7 @@ defmodule SagentsLiveDebugger.MixProject do
       {:phoenix_live_view, "~> 1.0"},
       {:jason, ">= 1.4.0"},
       # {:sagents, path: "../sagents"},
-      {:sagents, ">= 0.6.0"},
+      {:sagents, "~> 0.8.0-rc"},
       {:horde, "~> 0.10.0", optional: true},
       # markdown and code highlighting (autumn)
       {:mdex, ">= 0.11.0"},

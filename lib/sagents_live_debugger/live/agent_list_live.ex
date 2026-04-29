@@ -7,6 +7,7 @@ defmodule SagentsLiveDebugger.AgentListLive do
   import SagentsLiveDebugger.Live.Components.MessageComponents
   import SagentsLiveDebugger.Live.Components.FilterConfig
   alias SagentsLiveDebugger.{Metrics, FilterForm}
+  alias Sagents.Subscriber
 
   # Presence topics for debugger discovery
   @debug_viewers_topic "debug_viewers"
@@ -44,6 +45,7 @@ defmodule SagentsLiveDebugger.AgentListLive do
   def mount(_params, _session, socket) do
     # Configuration comes from on_mount callback via socket assigns
     coordinator = socket.assigns.coordinator
+    pubsub = socket.assigns.pubsub
     presence_module = socket.assigns.presence_module
     # Ensure user_timezone is set (comes from SessionConfig, default to UTC if missing)
     user_timezone = Map.get(socket.assigns, :user_timezone, "UTC")
@@ -52,9 +54,8 @@ defmodule SagentsLiveDebugger.AgentListLive do
 
     # Track debugger presence and subscribe to agent presence topic (for discovery)
     if connected?(socket) && presence_module do
-      pubsub_name = coordinator.pubsub_name()
       track_debugger_presence(presence_module, socket.id)
-      subscribe_to_agent_presence(pubsub_name)
+      subscribe_to_agent_presence(pubsub)
     end
 
     # Build initial agent list from presence (not Discovery polling)
@@ -64,8 +65,7 @@ defmodule SagentsLiveDebugger.AgentListLive do
     # Subscribe to presence changes for conversation agents (for viewer counts)
     subscribed_topics =
       if presence_module do
-        pubsub_name = coordinator.pubsub_name()
-        subscribe_to_conversation_agents(pubsub_name, agents)
+        subscribe_to_conversation_agents(pubsub, agents)
       else
         MapSet.new()
       end
@@ -95,6 +95,8 @@ defmodule SagentsLiveDebugger.AgentListLive do
       |> assign(:current_tab, :overview)
       |> assign(:event_stream, [])
       |> assign(:subscribed_agent_id, nil)
+      |> assign(:sagents_subs_main, %{})
+      |> assign(:sagents_subs_debug, %{})
       # Auto-follow state
       |> assign(:auto_follow_first, auto_follow_default)
       |> assign(:auto_follow_filters, :none)
@@ -192,8 +194,9 @@ defmodule SagentsLiveDebugger.AgentListLive do
 
   defp maybe_unsubscribe_from_previous_agent(socket) do
     if prev_agent_id = socket.assigns[:subscribed_agent_id] do
-      unsubscribe_from_agent_events(prev_agent_id, socket.assigns.coordinator)
-      assign(socket, :subscribed_agent_id, nil)
+      socket
+      |> unsubscribe_from_agent_events(prev_agent_id)
+      |> assign(:subscribed_agent_id, nil)
     else
       socket
     end
@@ -221,27 +224,29 @@ defmodule SagentsLiveDebugger.AgentListLive do
     end
   end
 
+  # Subscribe to both :main and :debug channels via Sagents.Subscriber. If the
+  # agent isn't running, the entry is recorded as :pending and presence_diff
+  # will upgrade it when the agent appears.
   defp subscribe_to_agent_events(socket, agent_id) do
-    # Use AgentServer subscription functions
-    # Handle case where agent doesn't exist (has shut down)
-    with :ok <- Sagents.AgentServer.subscribe(agent_id),
-         :ok <- Sagents.AgentServer.subscribe_debug(agent_id) do
-      assign(socket, :subscribed_agent_id, agent_id)
-    else
-      {:error, :process_not_found} ->
-        # Agent doesn't exist, don't subscribe
-        socket
+    main_subs =
+      Subscriber.subscribe_to_agent(socket.assigns.sagents_subs_main, agent_id, :main)
 
-      {:error, _reason} ->
-        # Other error (e.g., no pubsub configured), don't subscribe
-        socket
-    end
+    debug_subs =
+      Subscriber.subscribe_to_agent(socket.assigns.sagents_subs_debug, agent_id, :debug)
+
+    socket
+    |> assign(:sagents_subs_main, main_subs)
+    |> assign(:sagents_subs_debug, debug_subs)
+    |> assign(:subscribed_agent_id, agent_id)
   end
 
-  defp unsubscribe_from_agent_events(agent_id, _coordinator) do
-    # Unsubscribe returns :ok even if the agent process doesn't exist
-    :ok = Sagents.AgentServer.unsubscribe(agent_id)
-    :ok = Sagents.AgentServer.unsubscribe_debug(agent_id)
+  defp unsubscribe_from_agent_events(socket, agent_id) do
+    main_subs = Subscriber.unsubscribe_from_agent(socket.assigns.sagents_subs_main, agent_id)
+    debug_subs = Subscriber.unsubscribe_from_agent(socket.assigns.sagents_subs_debug, agent_id)
+
+    socket
+    |> assign(:sagents_subs_main, main_subs)
+    |> assign(:sagents_subs_debug, debug_subs)
   end
 
   # Handle agent status change events (for detail view)
@@ -282,10 +287,8 @@ defmodule SagentsLiveDebugger.AgentListLive do
       # Subscribe to any new conversation agents (for viewer counts)
       subscribed_topics =
         if socket.assigns.presence_module do
-          pubsub_name = socket.assigns.coordinator.pubsub_name()
-
           subscribe_to_new_conversation_agents(
-            pubsub_name,
+            socket.assigns.pubsub,
             agents,
             socket.assigns.subscribed_topics
           )
@@ -293,11 +296,29 @@ defmodule SagentsLiveDebugger.AgentListLive do
           socket.assigns.subscribed_topics
         end
 
+      # Upgrade any :pending subscriptions whose agent just appeared. No-op
+      # when there are no pending subs to upgrade.
+      new_main_subs =
+        Subscriber.handle_presence_diff(
+          socket.assigns.sagents_subs_main,
+          @agent_presence_topic,
+          payload
+        )
+
+      new_debug_subs =
+        Subscriber.handle_presence_diff(
+          socket.assigns.sagents_subs_debug,
+          @agent_presence_topic,
+          payload
+        )
+
       socket =
         socket
         |> assign(:agents, agents)
         |> assign(:metrics, metrics)
         |> assign(:subscribed_topics, subscribed_topics)
+        |> assign(:sagents_subs_main, new_main_subs)
+        |> assign(:sagents_subs_debug, new_debug_subs)
         |> handle_agents_joined(joined)
         |> handle_agents_left(left)
 
@@ -337,6 +358,26 @@ defmodule SagentsLiveDebugger.AgentListLive do
       socket
       |> assign(:agents, agents)
       |> assign(:metrics, metrics)
+
+    {:noreply, socket}
+  end
+
+  # Producer crash detection. When a subscribed AgentServer dies, the monitor
+  # we set up in Subscriber.subscribe_to_agent fires :DOWN. Route through both
+  # subs maps so :main and :debug subscriptions both flip to :pending — the
+  # next presence_diff join for that agent_id will resubscribe automatically.
+  def handle_info({:DOWN, ref, :process, _pid, reason}, socket) do
+    socket =
+      case Subscriber.handle_publisher_down(socket.assigns.sagents_subs_main, ref, reason) do
+        {:matched, new_subs} -> assign(socket, :sagents_subs_main, new_subs)
+        :no_match -> socket
+      end
+
+    socket =
+      case Subscriber.handle_publisher_down(socket.assigns.sagents_subs_debug, ref, reason) do
+        {:matched, new_subs} -> assign(socket, :sagents_subs_debug, new_subs)
+        :no_match -> socket
+      end
 
     {:noreply, socket}
   end
@@ -862,15 +903,11 @@ defmodule SagentsLiveDebugger.AgentListLive do
     # Unfollow previous if any
     socket = maybe_unfollow_agent(socket)
 
-    # Subscribe to agent events
+    # Subscribe to agent events (records :pending if agent isn't running yet —
+    # presence_diff will upgrade it).
     socket =
       if connected?(socket) do
-        with :ok <- Sagents.AgentServer.subscribe(agent_id),
-             :ok <- Sagents.AgentServer.subscribe_debug(agent_id) do
-          socket
-        else
-          _error -> socket
-        end
+        subscribe_to_agent_events(socket, agent_id)
       else
         socket
       end
@@ -896,11 +933,8 @@ defmodule SagentsLiveDebugger.AgentListLive do
         socket
 
       agent_id ->
-        # Unsubscribe from agent events
-        Sagents.AgentServer.unsubscribe(agent_id)
-        Sagents.AgentServer.unsubscribe_debug(agent_id)
-
         socket
+        |> unsubscribe_from_agent_events(agent_id)
         |> assign(:followed_agent_id, nil)
         |> assign(:event_stream, [])
         |> assign(:subagents, %{})
@@ -943,10 +977,10 @@ defmodule SagentsLiveDebugger.AgentListLive do
     end)
   end
 
-  # Subscribe to a presence topic
+  # Subscribe to a presence topic. Caller-level deduplication is handled via
+  # the :subscribed_topics MapSet, so plain Phoenix.PubSub.subscribe is fine.
   defp subscribe_to_presence(pubsub_name, topic) do
-    # Use Sagents.PubSub for automatic deduplication
-    Sagents.PubSub.subscribe(Phoenix.PubSub, pubsub_name, topic)
+    Phoenix.PubSub.subscribe(pubsub_name, topic)
   end
 
   # Load agent detail data.
@@ -1020,9 +1054,11 @@ defmodule SagentsLiveDebugger.AgentListLive do
     end
   end
 
-  # Subscribe to agent presence topic for real-time agent discovery
+  # Subscribe to agent presence topic for real-time agent discovery. The topic
+  # equals Sagents.Subscriber.presence_topic(), so this same diff stream also
+  # drives auto-resubscribe of :pending entries in the subs maps.
   defp subscribe_to_agent_presence(pubsub_name) do
-    Sagents.PubSub.subscribe(Phoenix.PubSub, pubsub_name, @agent_presence_topic)
+    Phoenix.PubSub.subscribe(pubsub_name, @agent_presence_topic)
   end
 
   def render(assigns) do
