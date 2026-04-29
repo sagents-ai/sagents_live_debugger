@@ -69,7 +69,8 @@ defmodule SagentsLiveDebugger.Router do
             end
 
           live_session :sagents_debugger,
-            session: {SagentsLiveDebugger.Router, :__session__, [coordinator, pubsub, presence_module]},
+            session:
+              {SagentsLiveDebugger.Router, :__session__, [coordinator, pubsub, presence_module]},
             on_mount: [SagentsLiveDebugger.SessionConfig],
             root_layout: {SagentsLiveDebugger.Layouts, :root},
             layout: {SagentsLiveDebugger.Layouts, :app} do
