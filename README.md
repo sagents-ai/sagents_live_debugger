@@ -45,7 +45,7 @@ scope "/dev" do
 end
 ```
 
-The `:pubsub` option is the `Phoenix.PubSub` instance your application uses to broadcast agent and presence events — the same name you pass to `Phoenix.PubSub.start_link/1` in your supervision tree (typically `MyApp.PubSub`). The debugger subscribes to agent presence and per-conversation viewer topics on this PubSub.
+The `:pubsub` option is the `Phoenix.PubSub` instance your application uses to broadcast agent and presence events — the same name you give your `Phoenix.PubSub` child spec in your supervision tree (typically `MyApp.PubSub`). The debugger subscribes to agent presence and per-conversation viewer topics on this PubSub.
 
 **Important:** Ensure your application has configured the timezone database in `config/config.exs`:
 

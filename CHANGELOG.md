@@ -20,7 +20,7 @@ sagents_live_debugger "/debug/agents",
 Mounting without `:pubsub` will raise `KeyError` at compile time.
 
 ### Added
-- `Sagents.Middleware.debug_summary/1` callback support in the Middleware tab. When a middleware module exports `debug_summary/1`, its return value (a map or string) is rendered in place of the raw config — letting middleware that holds large structures (caches, big in-memory stores) surface a curated, compact view instead of dumping their entire configuration into the debug page.
+- `c:Sagents.Middleware.debug_summary/1` callback support in the Middleware tab. When a middleware module exports `debug_summary/1`, its return value (a map or string) is rendered in place of the raw config — letting middleware that holds large structures (caches, big in-memory stores) surface a curated, compact view instead of dumping their entire configuration into the debug page.
 - Bounded inspect output for middleware config via `inspect_for_display/1`. Defaults are now `limit: 200` and `printable_limit: 16_384`, preventing a single oversized value from dominating render time and DOM size. Middleware that needs a richer view should opt into `debug_summary/1`.
 - Producer-crash recovery: `AgentListLive` now traps `:DOWN` from monitored AgentServers and flips the matching subscription entries to `:pending`, so the next presence-diff join for that `agent_id` resubscribes automatically.
 
