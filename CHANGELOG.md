@@ -1,5 +1,41 @@
 # Changelog
 
+## v0.4.0-rc.1
+
+Release candidate aligned with `sagents` v0.8.0-rc.1. Contains a breaking router change and a new middleware debug-summary callback.
+
+### Upgrading from v0.3.x - v0.4.0-rc.1
+
+The `sagents_live_debugger` router macro now **requires** a `:pubsub` option pointing at the host application's `Phoenix.PubSub` instance. Previously the debugger derived the PubSub name from `coordinator.pubsub_name()`; that path has been removed.
+
+Update your router:
+
+```elixir
+sagents_live_debugger "/debug/agents",
+  coordinator: MyApp.Coordinator,
+  pubsub: MyApp.PubSub,           # NEW — required
+  presence_module: MyAppWeb.Presence
+```
+
+Mounting without `:pubsub` will raise `KeyError` at compile time.
+
+### Added
+- `Sagents.Middleware.debug_summary/1` callback support in the Middleware tab. When a middleware module exports `debug_summary/1`, its return value (a map or string) is rendered in place of the raw config — letting middleware that holds large structures (caches, big in-memory stores) surface a curated, compact view instead of dumping their entire configuration into the debug page.
+- Bounded inspect output for middleware config via `inspect_for_display/1`. Defaults are now `limit: 200` and `printable_limit: 16_384`, preventing a single oversized value from dominating render time and DOM size. Middleware that needs a richer view should opt into `debug_summary/1`.
+- Producer-crash recovery: `AgentListLive` now traps `:DOWN` from monitored AgentServers and flips the matching subscription entries to `:pending`, so the next presence-diff join for that `agent_id` resubscribes automatically.
+
+### Changed
+- **Breaking:** `:pubsub` is now a required option on the `sagents_live_debugger` router macro. See upgrade notes above.
+- Updated dependency on `sagents` library to `>= 0.8.0-rc.1`.
+- Subscription handling migrated to `Sagents.Subscriber` for both `:main` and `:debug` channels. Subscriptions for not-yet-running agents are recorded as `:pending` and upgraded automatically when the agent appears via `presence_diff`, replacing the previous `Sagents.AgentServer.subscribe/subscribe_debug` calls that returned `{:error, :process_not_found}` for offline agents.
+- `subscribe_to_presence/2` and `subscribe_to_agent_presence/1` now use `Phoenix.PubSub.subscribe/2` directly (caller-level dedup via the `:subscribed_topics` MapSet) instead of `Sagents.PubSub.subscribe/3`.
+- Middleware tab config rendering refactored into a multi-clause `middleware_config_display/1` function component, dispatching at compile time on `{:map, _}` vs `{:string, _}` payloads from `display_config/1`.
+
+## v0.3.8
+
+### Fixed
+- `priv/` directory is now included in the published Hex package so the bundled CSS asset (`priv/static/debugger.css`) actually ships with the library [#24](https://github.com/sagents-ai/sagents_live_debugger/pull/24)
+
 ## v0.3.7
 
 ### Added

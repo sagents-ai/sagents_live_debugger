@@ -20,10 +20,12 @@ Add `sagents_live_debugger` to your list of dependencies in `mix.exs`:
 ```elixir
 def deps do
   [
-    {:sagents_live_debugger, "~> 0.3.0"}
+    {:sagents_live_debugger, "~> 0.4.0-rc"}
   ]
 end
 ```
+
+> **Note:** the `0.4.0-rc.x` line depends on `sagents 0.8.0-rc.x` and introduces a required `:pubsub` router option (see [Setup](#setup)). The `0.3.x` line tracks the previous `sagents` dependency.
 
 ## Setup
 
@@ -38,9 +40,12 @@ scope "/dev" do
 
   sagents_live_debugger "/debug/agents",
     coordinator: MyApp.Agents.Coordinator,
+    pubsub: MyApp.PubSub,
     presence_module: MyAppWeb.Presence
 end
 ```
+
+The `:pubsub` option is the `Phoenix.PubSub` instance your application uses to broadcast agent and presence events — the same name you pass to `Phoenix.PubSub.start_link/1` in your supervision tree (typically `MyApp.PubSub`). The debugger subscribes to agent presence and per-conversation viewer topics on this PubSub.
 
 **Important:** Ensure your application has configured the timezone database in `config/config.exs`:
 
@@ -65,6 +70,7 @@ The `sagents_live_debugger` macro accepts the following options:
 ### Required
 
 - `:coordinator` - Your application's agent coordinator module (created through a mix task)
+- `:pubsub` - The `Phoenix.PubSub` instance the host application uses to broadcast agent and presence events (e.g. `MyApp.PubSub`). The debugger subscribes to `Sagents.Subscriber.presence_topic/0` and to per-conversation viewer presence topics on this PubSub
 
 ### Optional
 
@@ -77,6 +83,7 @@ The `sagents_live_debugger` macro accepts the following options:
 ```elixir
 sagents_live_debugger "/debug/agents",
   coordinator: MyApp.Agents.Coordinator,
+  pubsub: MyApp.PubSub,
   presence_module: MyApp.Presence
 ```
 
@@ -90,6 +97,7 @@ The option accepts either a single atom (used as the nonce for both style and sc
 # Single nonce for both style and script
 sagents_live_debugger "/debug/agents",
   coordinator: AgentsDemo.Agents.Coordinator,
+  pubsub: AgentsDemo.PubSub,
   presence_module: AgentsDemoWeb.Presence,
   csp_nonce_assign_key: :csp_nonce
 
@@ -100,6 +108,7 @@ sagents_live_debugger "/debug/agents",
     script: :script_src_nonce
   },
   coordinator: AgentsDemo.Agents.Coordinator,
+  pubsub: AgentsDemo.PubSub,
   presence_module: AgentsDemoWeb.Presence
 ```
 
