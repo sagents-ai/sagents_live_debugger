@@ -127,7 +127,7 @@ defmodule SagentsLiveDebugger.Live.Components.SubagentsTab do
                 <.subagent_middleware_view subagent={@subagent} />
               <% "tools" -> %>
                 <.tools_view subagent={@subagent} />
-              <% _ -> %>
+              <% _other -> %>
                 <.config_view subagent={@subagent} />
             <% end %>
           </div>
