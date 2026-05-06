@@ -610,7 +610,7 @@ defmodule SagentsLiveDebugger.Live.Components.MessageComponents do
   def format_tool_arguments(arguments) when is_map(arguments) do
     Jason.encode!(arguments, pretty: true)
   rescue
-    _ -> inspect_for_display(arguments)
+    _other -> inspect_for_display(arguments)
   end
 
   def format_tool_arguments(arguments) when is_binary(arguments) do
@@ -619,7 +619,7 @@ defmodule SagentsLiveDebugger.Live.Components.MessageComponents do
       {:error, _} -> arguments
     end
   rescue
-    _ -> arguments
+    _other -> arguments
   end
 
   def format_tool_arguments(arguments),
@@ -631,7 +631,7 @@ defmodule SagentsLiveDebugger.Live.Components.MessageComponents do
       {:error, _} -> content
     end
   rescue
-    _ -> content
+    _other -> content
   end
 
   def format_tool_result(content),

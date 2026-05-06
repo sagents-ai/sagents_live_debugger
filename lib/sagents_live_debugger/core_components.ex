@@ -477,7 +477,7 @@ defmodule SagentsLiveDebugger.CoreComponents do
       formatter: {:html_inline, language: language, theme: "material_oceanic"}
     )
   rescue
-    _ ->
+    _other ->
       # Fallback to plain pre on error - escape HTML entities manually
       escaped = code |> escape_html()
       "<pre>#{escaped}</pre>"

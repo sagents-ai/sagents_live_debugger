@@ -19,7 +19,7 @@ defmodule SagentsLiveDebugger.SessionConfig do
       |> Phoenix.LiveView.get_connect_params()
       |> case do
         %{"time_zone" => tz} -> tz
-        _ -> nil
+        _other -> nil
       end
       |> Timezone.validate_or_utc()
 

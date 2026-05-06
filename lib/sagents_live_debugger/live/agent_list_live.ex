@@ -170,7 +170,7 @@ defmodule SagentsLiveDebugger.AgentListLive do
             "todos" -> :todos
             "events" -> :events
             "subagents" -> :subagents
-            _ -> :overview
+            _other -> :overview
           end
 
         # Touch the agent to reset inactivity timer
@@ -736,7 +736,7 @@ defmodule SagentsLiveDebugger.AgentListLive do
       viewers = coordinator.list_conversation_viewers(conversation_id)
       map_size(viewers)
     rescue
-      _ -> 0
+      _other -> 0
     end
   end
 
@@ -917,7 +917,7 @@ defmodule SagentsLiveDebugger.AgentListLive do
       try do
         Sagents.AgentServer.get_state(agent_id)
       catch
-        :exit, _ -> nil
+        :exit, _other -> nil
       end
 
     socket
@@ -1009,7 +1009,7 @@ defmodule SagentsLiveDebugger.AgentListLive do
         try do
           Sagents.AgentServer.get_state(agent_id)
         catch
-          :exit, _ -> nil
+          :exit, _other -> nil
         end
       end
 
@@ -1215,19 +1215,19 @@ defmodule SagentsLiveDebugger.AgentListLive do
           </div>
         <% end %>
       </header>
-      
+
     <!-- System Overview Panel -->
       <.system_overview metrics={@metrics} />
-      
+
     <!-- Auto-Follow Filter Configuration -->
       <.filter_config_form
         filters={@auto_follow_filters}
         presence_active={@followed_agent_id != nil}
       />
-      
+
     <!-- Agent List Filters (for visibility/sorting) -->
       <.filter_controls form={@form} />
-      
+
     <!-- Active Agent List -->
       <.agent_table agents={@filtered_agents} followed_agent_id={@followed_agent_id} />
     </div>
@@ -1625,7 +1625,7 @@ defmodule SagentsLiveDebugger.AgentListLive do
 
     case Map.get(presences, agent_id) do
       %{metas: metas} when metas != [] -> most_recent_meta(metas)
-      _ -> nil
+      _other -> nil
     end
   end
 
@@ -1806,7 +1806,7 @@ defmodule SagentsLiveDebugger.AgentListLive do
           </div>
         </div>
       <% end %>
-      
+
     <!-- Base System Prompt -->
       <%= if @agent.base_system_prompt && @agent.base_system_prompt != "" do %>
         <div class="system-message-section">
@@ -1957,7 +1957,7 @@ defmodule SagentsLiveDebugger.AgentListLive do
                 Err
               <% :debug -> %>
                 Dbg
-              <% _ -> %>
+              <% _other -> %>
                 Std
             <% end %>
           </span>
@@ -2120,7 +2120,7 @@ defmodule SagentsLiveDebugger.AgentListLive do
       :pending -> "⏸️"
       :in_progress -> "▶️"
       :completed -> "✅"
-      _ -> "❓"
+      _other -> "❓"
     end
   end
 
@@ -2164,7 +2164,7 @@ defmodule SagentsLiveDebugger.AgentListLive do
       {:agent_state_update, _middleware_id, _state} -> false
       {:state_restored, _state} -> false
       # Display all other events
-      _ -> true
+      _other -> true
     end
   end
 
@@ -2192,7 +2192,7 @@ defmodule SagentsLiveDebugger.AgentListLive do
     |> Enum.find_value("", fn
       %{type: :text, content: text} when is_binary(text) -> String.slice(text, 0, 50)
       text when is_binary(text) -> String.slice(text, 0, 50)
-      _ -> nil
+      _other -> nil
     end)
   end
 
@@ -2252,7 +2252,7 @@ defmodule SagentsLiveDebugger.AgentListLive do
         has_thinking =
           Enum.any?(content_parts, fn
             %{type: :thinking} -> true
-            _ -> false
+            _other -> false
           end)
 
         # Check for text content and get preview
@@ -2298,7 +2298,7 @@ defmodule SagentsLiveDebugger.AgentListLive do
           case message.role do
             :user -> "User"
             :assistant -> "Assistant"
-            _ -> String.capitalize(to_string(message.role))
+            _other -> String.capitalize(to_string(message.role))
           end
 
         %{
@@ -2408,7 +2408,7 @@ defmodule SagentsLiveDebugger.AgentListLive do
 
               if preview != "", do: " - #{preview}", else: ""
 
-            _ ->
+            _other ->
               ""
           end
 
@@ -2503,7 +2503,7 @@ defmodule SagentsLiveDebugger.AgentListLive do
 
         "#{action_name}: #{data_preview}"
 
-      _ ->
+      _other ->
         inspect(action_data, limit: 100)
     end
   end
@@ -2602,7 +2602,7 @@ defmodule SagentsLiveDebugger.AgentListLive do
       case event do
         {type, _} when is_atom(type) -> to_string(type)
         {type, _, _} when is_atom(type) -> to_string(type)
-        _ -> "unknown"
+        _other -> "unknown"
       end
 
     %{
@@ -2617,7 +2617,7 @@ defmodule SagentsLiveDebugger.AgentListLive do
   defp short_id(sub_agent_id) when is_binary(sub_agent_id) do
     case String.split(sub_agent_id, "-sub-") do
       [_parent, suffix] -> "sub-#{suffix}"
-      _ -> String.slice(sub_agent_id, -10, 10)
+      _other -> String.slice(sub_agent_id, -10, 10)
     end
   end
 
@@ -2627,7 +2627,7 @@ defmodule SagentsLiveDebugger.AgentListLive do
     case event do
       {type, _} when is_atom(type) -> to_string(type)
       {type, _, _} when is_atom(type) -> to_string(type)
-      _ -> "unknown"
+      _other -> "unknown"
     end
   end
 
@@ -2670,7 +2670,7 @@ defmodule SagentsLiveDebugger.AgentListLive do
 
               assign(socket, :event_stream, [updated_event | rest])
 
-            _ ->
+            _other ->
               # No previous delta event, create new one using format_event_data
               event_data = %{
                 id: System.unique_integer([:positive, :monotonic]),
@@ -2684,7 +2684,7 @@ defmodule SagentsLiveDebugger.AgentListLive do
               assign(socket, :event_stream, new_events)
           end
 
-        _ ->
+        _other ->
           # Normal event, add to stream
           event_data = %{
             id: System.unique_integer([:positive, :monotonic]),
