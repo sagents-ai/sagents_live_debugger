@@ -1,5 +1,15 @@
 # Changelog
 
+## v0.4.0-rc.2
+
+Maintenance release candidate. No breaking changes since v0.4.0-rc.1 — primarily a dependency refresh aligning with newer `sagents`/`langchain` releases, plus code-quality cleanups.
+
+### Changed
+- Dependency refresh, notably `sagents` `0.8.0-rc.1` → `0.8.0-rc.11` and `langchain` `0.8.4` → `0.8.12`, along with `phoenix`, `ecto` (3.13 → 3.14), `decimal` (2 → 3), `req`, `finch`, `mint`, `plug`, and other transitive bumps [#29](https://github.com/sagents-ai/sagents_live_debugger/pull/29)
+- Removed dead `nil`-handling clauses in `AgentListLive` (`format_time_ago/1`, `format_duration_from_start/1`, `detail_format_time_ago/1`) that a newer compiler flagged as unreachable — every caller already guards against `nil` [#29](https://github.com/sagents-ai/sagents_live_debugger/pull/29)
+- Credo-driven style cleanups across `agent_list_live.ex`, `core_components.ex`, `message_components.ex`, `session_config.ex`, and `subagents_tab.ex` (not part of a PR)
+- Documentation fixes to silence `mix docs` warnings in `README.md` and `CHANGELOG.md` (not part of a PR)
+
 ## v0.4.0-rc.1
 
 Release candidate aligned with `sagents` v0.8.0-rc.1. Contains a breaking router change and a new middleware debug-summary callback.
