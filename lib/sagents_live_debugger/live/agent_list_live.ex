@@ -1579,8 +1579,6 @@ defmodule SagentsLiveDebugger.AgentListLive do
     module |> Module.split() |> Enum.join(".")
   end
 
-  defp format_time_ago(nil), do: "Never"
-
   defp format_time_ago(datetime) do
     now = DateTime.utc_now()
     diff_seconds = DateTime.diff(now, datetime, :second)
@@ -1608,9 +1606,9 @@ defmodule SagentsLiveDebugger.AgentListLive do
 
   defp format_duration(_), do: "—"
 
-  # Format duration from a start DateTime to now
-  defp format_duration_from_start(nil), do: "—"
-
+  # Format duration from a start DateTime to now.
+  # Callers guard against nil via `if @agent.started_at` / `if @started_at`,
+  # so only a DateTime ever reaches here.
   defp format_duration_from_start(started_at) do
     ms = DateTime.diff(DateTime.utc_now(), started_at, :millisecond)
     format_duration(ms)
@@ -2137,8 +2135,6 @@ defmodule SagentsLiveDebugger.AgentListLive do
   defp detail_status_description(:error), do: "Execution failed"
   defp detail_status_description(:cancelled), do: "Cancelled by user"
   defp detail_status_description(_), do: "Unknown"
-
-  defp detail_format_time_ago(nil), do: "Never"
 
   defp detail_format_time_ago(datetime) do
     now = DateTime.utc_now()
