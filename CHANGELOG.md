@@ -23,8 +23,8 @@ Mounting without `:pubsub` will raise `KeyError` at compile time.
 
 ### Changed
 - **Breaking:** `:pubsub` is now a required option on the `sagents_live_debugger` router macro. See upgrade notes above.
-- Promoted `sagents` dependency constraint from the pre-release `~> 0.8.0-rc` to the stable `~> 0.8.0` [#31](https://github.com/sagents-ai/sagents_live_debugger/pull/31)
-- Updated README install instructions to the stable `~> 0.4.0` and removed the release-candidate note [#31](https://github.com/sagents-ai/sagents_live_debugger/pull/31)
+- Promoted `sagents` dependency constraint from the pre-release `~> 0.8.0-rc` to the stable `~> 0.8.0` [#33](https://github.com/sagents-ai/sagents_live_debugger/pull/33)
+- Updated README install instructions to the stable `~> 0.4.0` and removed the release-candidate note [#33](https://github.com/sagents-ai/sagents_live_debugger/pull/33)
 
 ## v0.4.0-rc.2
 
