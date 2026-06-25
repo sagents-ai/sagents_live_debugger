@@ -20,12 +20,10 @@ Add `sagents_live_debugger` to your list of dependencies in `mix.exs`:
 ```elixir
 def deps do
   [
-    {:sagents_live_debugger, "~> 0.4.0-rc"}
+    {:sagents_live_debugger, "~> 0.4.0"}
   ]
 end
 ```
-
-> **Note:** the `0.4.0-rc.x` line depends on `sagents 0.8.0-rc.x` and introduces a required `:pubsub` router option (see [Setup](#setup)). The `0.3.x` line tracks the previous `sagents` dependency.
 
 ## Setup
 
