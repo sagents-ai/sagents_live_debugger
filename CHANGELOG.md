@@ -1,5 +1,31 @@
 # Changelog
 
+## v0.4.0
+
+First stable release of the 0.4.0 line, promoting the `v0.4.0-rc.1`/`v0.4.0-rc.2` work out of the release-candidate phase. The library now tracks the stable `sagents` 0.8.0 line. There are no functional changes since `v0.4.0-rc.2` — see the RC entries below for the full feature set.
+
+Because most users are upgrading directly from the 0.3.x line, note the breaking router change carried over from `v0.4.0-rc.1`.
+
+### Upgrading from v0.3.x - v0.4.0
+
+The `sagents_live_debugger` router macro now **requires** a `:pubsub` option pointing at the host application's `Phoenix.PubSub` instance. Previously the debugger derived the PubSub name from `coordinator.pubsub_name()`; that path has been removed.
+
+Update your router:
+
+```elixir
+sagents_live_debugger "/debug/agents",
+  coordinator: MyApp.Coordinator,
+  pubsub: MyApp.PubSub,           # NEW — required
+  presence_module: MyAppWeb.Presence
+```
+
+Mounting without `:pubsub` will raise `KeyError` at compile time.
+
+### Changed
+- **Breaking:** `:pubsub` is now a required option on the `sagents_live_debugger` router macro. See upgrade notes above.
+- Promoted `sagents` dependency constraint from the pre-release `~> 0.8.0-rc` to the stable `~> 0.8.0` [#33](https://github.com/sagents-ai/sagents_live_debugger/pull/33)
+- Updated README install instructions to the stable `~> 0.4.0` and removed the release-candidate note [#33](https://github.com/sagents-ai/sagents_live_debugger/pull/33)
+
 ## v0.4.0-rc.2
 
 Maintenance release candidate. No breaking changes since v0.4.0-rc.1 — primarily a dependency refresh aligning with newer `sagents`/`langchain` releases, plus code-quality cleanups.
