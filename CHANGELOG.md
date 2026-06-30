@@ -1,5 +1,17 @@
 # Changelog
 
+## v0.4.1
+
+Widens the `sagents` dependency constraint from `~> 0.8.0` to `~> 0.8` so the
+debugger resolves against both the `sagents` 0.8.x and 0.9.x lines. The 0.9.0
+release reworks only the optional Horde distribution backend and changes no API
+the debugger consumes (`Sagents.AgentServer`, `Sagents.Middleware`,
+`Sagents.MiddlewareEntry`, `Sagents.Presence`, `Sagents.Subscriber`), so the two
+are compatible. No functional changes.
+
+### Changed
+- Relax `sagents` requirement to `~> 0.8` (allows `>= 0.8.0` and `< 1.0.0`) [#34](https://github.com/sagents-ai/sagents_live_debugger/pull/34)
+
 ## v0.4.0
 
 First stable release of the 0.4.0 line, promoting the `v0.4.0-rc.1`/`v0.4.0-rc.2` work out of the release-candidate phase. The library now tracks the stable `sagents` 0.8.0 line. There are no functional changes since `v0.4.0-rc.2` — see the RC entries below for the full feature set.
