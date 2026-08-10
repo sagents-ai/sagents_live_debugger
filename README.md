@@ -45,14 +45,17 @@ end
 
 The `:pubsub` option is the `Phoenix.PubSub` instance your application uses to broadcast agent and presence events — the same name you give your `Phoenix.PubSub` child spec in your supervision tree (typically `MyApp.PubSub`). The debugger subscribes to agent presence and per-conversation viewer topics on this PubSub.
 
-**Important:** Ensure your application has configured the timezone database in `config/config.exs`:
+**Important:** Ensure your application has a timezone database dependency (e.g. [`tzdata`](https://hex.pm/packages/tzdata) or [`zoneinfo`](https://hex.pm/packages/zoneinfo)) and configures it in `config/config.exs`:
 
 ```elixir
 # config/config.exs
 import Config
 
-# Required for timezone support
+# Required for timezone support — use whichever Calendar.TimeZoneDatabase
+# your app already depends on, for example:
 config :elixir, :time_zone_database, Tzdata.TimeZoneDatabase
+# or:
+# config :elixir, :time_zone_database, Zoneinfo.TimeZoneDatabase
 ```
 
 That's it! Visit `http://localhost:4000/dev/debug/agents` to access the debugger.
@@ -236,7 +239,7 @@ See the tools a sub-agent has access to in order to do its work.
 The debugger is designed as a self-contained plugin library:
 - No JavaScript or CSS files for the host application to compile or bundle
 - CSS and JS are read at compile time and served from cache-busted Plug routes (`/css-<md5>`, `/js-<md5>`) with long-lived immutable cache headers, mirroring the `Phoenix.LiveDashboard` pattern
-- Browser timezone is pushed through the LiveSocket `connect_params` on connect and validated server-side against `Tzdata`
+- Browser timezone is pushed through the LiveSocket `connect_params` on connect and validated server-side against the host's configured Calendar time zone database
 - Zero configuration beyond adding to the router, with optional CSP nonce support for strict-CSP host apps
 
 ### Event-Driven Architecture
