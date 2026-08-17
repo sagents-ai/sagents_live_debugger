@@ -10,6 +10,9 @@ defmodule SagentsLiveDebugger.Live.Components.MessageComponents do
 
   import SagentsLiveDebugger.CoreComponents, only: [highlight_code: 1]
 
+  alias LangChain.Message
+  alias Sagents.Message.DisplayHelpers
+
   @doc """
   Renders a single message item with role emoji, content, tool calls/results, and metadata.
   """
@@ -24,12 +27,10 @@ defmodule SagentsLiveDebugger.Live.Components.MessageComponents do
           {message_role_emoji(@message.role)}
           {String.capitalize(to_string(@message.role))}
         </span>
-        <%= if Map.get(@message, :status) do %>
-          <span class={"message-status status-#{Map.get(@message, :status)}"}>
-            {Map.get(@message, :status)}
-          </span>
-        <% end %>
+        <.message_status message={@message} />
       </div>
+
+      <.message_stop_note message={@message} />
 
       <div class="message-content">
         {render_message_content(@message)}
@@ -61,6 +62,112 @@ defmodule SagentsLiveDebugger.Live.Components.MessageComponents do
       <% end %>
     </div>
     """
+  end
+
+  @doc """
+  Renders the message's status badge.
+
+  The status value is shown verbatim, since it is the name a developer reads in
+  their own code. What it means goes in the tooltip instead. Nothing is rendered
+  for a message carrying no status.
+  """
+  attr :message, :map, required: true
+
+  def message_status(assigns) do
+    status = stop_status(assigns.message)
+
+    assigns =
+      assigns
+      |> assign(:status, status)
+      |> assign(:explanation, status_explanation(status))
+
+    ~H"""
+    <span :if={@status} class={"message-status status-#{@status}"} title={@explanation}>
+      {@status}
+    </span>
+    """
+  end
+
+  @doc """
+  Renders the provider's own account of why a message stopped.
+
+  Nothing is rendered when the provider named no cause. Placed as a sibling of
+  the message body rather than inside it: a filtered response arrives with empty
+  or near-empty content, so a note nested in the body has nothing to sit beside.
+  """
+  attr :message, :map, required: true
+
+  def message_stop_note(assigns) do
+    assigns =
+      assigns
+      |> assign(:status, stop_status(assigns.message))
+      |> assign(:detail, stop_detail_text(assigns.message))
+
+    ~H"""
+    <div :if={@detail} class={"message-stop-note status-#{@status}"}>
+      {@detail}
+    </div>
+    """
+  end
+
+  # `DisplayHelpers.stop_reason/1` normalizes a dead stream across the supported
+  # LangChain range: releases below 0.10.0 record it as `:cancelled` carrying
+  # `metadata[:streaming_error]`, later ones as `:stream_error`. Reading
+  # `Message.status` here would badge one condition two different ways depending
+  # on which LangChain the host installed. A finished message reports no reason,
+  # so its own `:complete` stands in and keeps the badge.
+  defp stop_status(%Message{} = message) do
+    DisplayHelpers.stop_reason(message) || message.status
+  end
+
+  defp stop_status(message), do: Map.get(message, :status)
+
+  defp status_explanation(:length),
+    do: "Stopped at the output token cap. The turn ended early and the conversation stays usable."
+
+  defp status_explanation(:cancelled), do: "The caller stopped the response before it finished."
+
+  defp status_explanation(:content_filtered),
+    do: "The provider's filter stopped the response."
+
+  defp status_explanation(:stream_error), do: "The stream died mid-response."
+  defp status_explanation(_status), do: nil
+
+  # The provider's own description of the cause, when it named one. A filtered
+  # response says almost nothing on its own, so the category and explanation are
+  # the whole content of the row.
+  defp stop_detail_text(%Message{} = message) do
+    case DisplayHelpers.stop_details(message) do
+      details when is_map(details) -> format_stop_details(details)
+      nil -> streaming_error_text(message)
+    end
+  end
+
+  defp stop_detail_text(_message), do: nil
+
+  defp format_stop_details(details) do
+    label =
+      [Map.get(details, "type"), Map.get(details, "category")]
+      |> Enum.filter(&is_binary/1)
+      |> Enum.join(" / ")
+
+    case {label, Map.get(details, "explanation")} do
+      {"", explanation} when is_binary(explanation) -> explanation
+      {"", _no_explanation} -> inspect_for_display(details)
+      {label, explanation} when is_binary(explanation) -> "#{label}: #{explanation}"
+      {label, _no_explanation} -> label
+    end
+  end
+
+  # `streaming_error/1` reads `Message.metadata`, which is not serialized, so a
+  # message restored from persisted agent state reports its status without the
+  # error that produced it.
+  defp streaming_error_text(message) do
+    case DisplayHelpers.streaming_error(message) do
+      %{message: text} when is_binary(text) -> text
+      nil -> nil
+      error -> inspect_for_display(error)
+    end
   end
 
   @doc """

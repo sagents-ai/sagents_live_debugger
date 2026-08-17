@@ -524,8 +524,51 @@ td {
   color: #065f46;
 }
 
+/* A caller-initiated stop. Neutral rather than red: nothing failed, and red is
+   reserved for the stream dying. */
 .message-status.status-cancelled {
+  background: #e5e7eb;
+  color: #374151;
+}
+
+/* The output token cap. Not an error anywhere in the stack — the turn ends
+   early and the conversation stays usable. */
+.message-status.status-length {
+  background: #fef3c7;
+  color: #92400e;
+}
+
+.message-status.status-content_filtered {
+  background: #ffedd5;
+  color: #9a3412;
+}
+
+.message-status.status-stream_error {
   background: #fee2e2;
+  color: #991b1b;
+}
+
+.message-stop-note {
+  margin-bottom: 0.75rem;
+  padding: 0.5rem 0.75rem;
+  border-left: 3px solid #d1d5db;
+  border-radius: 0.25rem;
+  background: #f9fafb;
+  color: #374151;
+  font-size: 0.8125rem;
+  line-height: 1.5;
+  white-space: pre-wrap;
+}
+
+.message-stop-note.status-content_filtered {
+  border-left-color: #f97316;
+  background: #fff7ed;
+  color: #9a3412;
+}
+
+.message-stop-note.status-stream_error {
+  border-left-color: #ef4444;
+  background: #fef2f2;
   color: #991b1b;
 }
 
