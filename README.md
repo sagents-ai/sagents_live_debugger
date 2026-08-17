@@ -45,15 +45,31 @@ end
 
 The `:pubsub` option is the `Phoenix.PubSub` instance your application uses to broadcast agent and presence events — the same name you give your `Phoenix.PubSub` child spec in your supervision tree (typically `MyApp.PubSub`). The debugger subscribes to agent presence and per-conversation viewer topics on this PubSub.
 
-**Important:** Ensure your application has configured the timezone database in `config/config.exs`:
+**Important:** The debugger renders event timestamps in the viewer's browser timezone, which needs a `Calendar.TimeZoneDatabase` in your application. Add one, such as [`tzdata`](https://hex.pm/packages/tzdata) or [`zoneinfo`](https://hex.pm/packages/zoneinfo):
+
+```elixir
+# mix.exs
+def deps do
+  [
+    {:tzdata, "~> 1.1"}
+  ]
+end
+```
+
+And configure it:
 
 ```elixir
 # config/config.exs
 import Config
 
-# Required for timezone support
+# Use whichever Calendar.TimeZoneDatabase your application depends on,
+# for example:
 config :elixir, :time_zone_database, Tzdata.TimeZoneDatabase
+# or:
+# config :elixir, :time_zone_database, Zoneinfo.TimeZoneDatabase
 ```
+
+Without a time zone database configured, every timestamp renders in UTC.
 
 That's it! Visit `http://localhost:4000/dev/debug/agents` to access the debugger.
 
@@ -236,7 +252,7 @@ See the tools a sub-agent has access to in order to do its work.
 The debugger is designed as a self-contained plugin library:
 - No JavaScript or CSS files for the host application to compile or bundle
 - CSS and JS are read at compile time and served from cache-busted Plug routes (`/css-<md5>`, `/js-<md5>`) with long-lived immutable cache headers, mirroring the `Phoenix.LiveDashboard` pattern
-- Browser timezone is pushed through the LiveSocket `connect_params` on connect and validated server-side against `Tzdata`
+- Browser timezone is pushed through the LiveSocket `connect_params` on connect and validated server-side against the host's configured Calendar time zone database
 - Zero configuration beyond adding to the router, with optional CSP nonce support for strict-CSP host apps
 
 ### Event-Driven Architecture

@@ -2043,7 +2043,7 @@ defmodule SagentsLiveDebugger.AgentListLive do
   end
 
   defp format_timestamp(datetime, timezone) do
-    case DateTime.shift_zone(datetime, timezone, Tzdata.TimeZoneDatabase) do
+    case DateTime.shift_zone(datetime, timezone) do
       {:ok, shifted} ->
         shifted
         |> DateTime.truncate(:second)

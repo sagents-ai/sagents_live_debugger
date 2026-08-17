@@ -12,8 +12,9 @@ defmodule SagentsLiveDebugger.SessionConfig do
     presence_module = session["presence_module"]
 
     # Browser timezone arrives via LiveSocket connect_params (see Assets.@init_js).
-    # Validate against Tzdata so a bogus/unknown zone can't break downstream
-    # DateTime.shift_zone/3 calls when formatting event timestamps.
+    # Validate against the configured Calendar time zone database so a
+    # bogus/unknown zone can't break downstream DateTime.shift_zone/2 calls
+    # when formatting event timestamps.
     user_timezone =
       socket
       |> Phoenix.LiveView.get_connect_params()

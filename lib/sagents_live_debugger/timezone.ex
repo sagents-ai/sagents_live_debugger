@@ -5,19 +5,20 @@ defmodule SagentsLiveDebugger.Timezone do
   The debugger passes the browser's detected timezone (from
   `Intl.DateTimeFormat().resolvedOptions().timeZone`) through the LiveSocket
   `connect_params` as `"time_zone"`. This module ensures that only valid zones
-  known to `Tzdata` make it into socket state, so downstream
-  `DateTime.shift_zone/3` calls cannot crash when rendering event timestamps.
+  known to the host application's configured Calendar time zone database make
+  it into socket state, so downstream `DateTime.shift_zone/2` calls cannot
+  crash when rendering event timestamps.
   """
 
   @doc """
-  Validates a timezone string against `Tzdata.TimeZoneDatabase`.
+  Validates a timezone string against the configured Calendar time zone database.
 
   Returns `{:ok, timezone}` for recognized zones, `{:error, :invalid_timezone}`
   otherwise (including for `nil` or non-binary input).
   """
   @spec validate(any()) :: {:ok, String.t()} | {:error, :invalid_timezone}
   def validate(timezone) when is_binary(timezone) do
-    case DateTime.shift_zone(DateTime.utc_now(), timezone, Tzdata.TimeZoneDatabase) do
+    case DateTime.shift_zone(DateTime.utc_now(), timezone) do
       {:ok, _} -> {:ok, timezone}
       {:error, _} -> {:error, :invalid_timezone}
     end

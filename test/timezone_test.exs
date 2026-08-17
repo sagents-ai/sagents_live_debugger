@@ -34,27 +34,27 @@ defmodule SagentsLiveDebugger.TimezoneTest do
     end
   end
 
-  describe "DateTime.shift_zone/3 sanity checks" do
+  describe "DateTime.shift_zone/2 sanity checks" do
     test "works with valid timezones" do
       dt = ~U[2025-01-03 14:32:15Z]
 
-      assert {:ok, shifted} = DateTime.shift_zone(dt, "America/New_York", Tzdata.TimeZoneDatabase)
+      assert {:ok, shifted} = DateTime.shift_zone(dt, "America/New_York")
       assert shifted.hour == 9
       assert shifted.minute == 32
 
-      assert {:ok, shifted} = DateTime.shift_zone(dt, "Asia/Tokyo", Tzdata.TimeZoneDatabase)
+      assert {:ok, shifted} = DateTime.shift_zone(dt, "Asia/Tokyo")
       assert shifted.hour == 23
       assert shifted.minute == 32
     end
 
     test "returns :error for invalid timezones" do
       dt = ~U[2025-01-03 14:32:15Z]
-      assert {:error, _} = DateTime.shift_zone(dt, "Invalid/Timezone", Tzdata.TimeZoneDatabase)
+      assert {:error, _} = DateTime.shift_zone(dt, "Invalid/Timezone")
     end
 
     test "works with UTC" do
       dt = ~U[2025-01-03 14:32:15Z]
-      assert {:ok, shifted} = DateTime.shift_zone(dt, "UTC", Tzdata.TimeZoneDatabase)
+      assert {:ok, shifted} = DateTime.shift_zone(dt, "UTC")
       assert shifted.hour == 14
       assert shifted.minute == 32
     end

@@ -46,7 +46,10 @@ defmodule SagentsLiveDebugger.MixProject do
       # markdown and code highlighting (autumn)
       {:mdex, ">= 0.11.0"},
       {:lumis, ">= 0.1.0"},
-      {:tzdata, ">= 1.1.0"},
+      # Time zone database for this package's own tests; host apps configure
+      # their own Calendar.TimeZoneDatabase. Reads the OS zoneinfo files under
+      # /usr/share/zoneinfo, so it pulls no HTTP client of its own.
+      {:zoneinfo, ">= 0.1.0", only: :test},
       # Structural assertions against rendered components
       {:lazy_html, ">= 0.1.0", only: :test},
       # Docs
