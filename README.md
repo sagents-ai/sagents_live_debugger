@@ -45,18 +45,31 @@ end
 
 The `:pubsub` option is the `Phoenix.PubSub` instance your application uses to broadcast agent and presence events — the same name you give your `Phoenix.PubSub` child spec in your supervision tree (typically `MyApp.PubSub`). The debugger subscribes to agent presence and per-conversation viewer topics on this PubSub.
 
-**Important:** Ensure your application has a timezone database dependency (e.g. [`tzdata`](https://hex.pm/packages/tzdata) or [`zoneinfo`](https://hex.pm/packages/zoneinfo)) and configures it in `config/config.exs`:
+**Important:** The debugger renders event timestamps in the viewer's browser timezone, which needs a `Calendar.TimeZoneDatabase` in your application. Add one, such as [`tzdata`](https://hex.pm/packages/tzdata) or [`zoneinfo`](https://hex.pm/packages/zoneinfo):
+
+```elixir
+# mix.exs
+def deps do
+  [
+    {:tzdata, "~> 1.1"}
+  ]
+end
+```
+
+And configure it:
 
 ```elixir
 # config/config.exs
 import Config
 
-# Required for timezone support — use whichever Calendar.TimeZoneDatabase
-# your app already depends on, for example:
+# Use whichever Calendar.TimeZoneDatabase your application depends on,
+# for example:
 config :elixir, :time_zone_database, Tzdata.TimeZoneDatabase
 # or:
 # config :elixir, :time_zone_database, Zoneinfo.TimeZoneDatabase
 ```
+
+Without a time zone database configured, every timestamp renders in UTC.
 
 That's it! Visit `http://localhost:4000/dev/debug/agents` to access the debugger.
 
