@@ -1,6 +1,6 @@
 # Changelog
 
-## Unreleased
+## v0.6.0
 
 ### Changed
 - **Breaking:** `tzdata` is no longer a runtime dependency. Timestamps shift through `DateTime.shift_zone/2`, which resolves the `Calendar.TimeZoneDatabase` the host application configures. A host without one configured renders every timestamp in UTC [#38](https://github.com/sagents-ai/sagents_live_debugger/pull/38)
