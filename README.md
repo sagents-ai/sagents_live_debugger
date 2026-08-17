@@ -20,7 +20,7 @@ Add `sagents_live_debugger` to your list of dependencies in `mix.exs`:
 ```elixir
 def deps do
   [
-    {:sagents_live_debugger, "~> 0.4.0"}
+    {:sagents_live_debugger, "~> 0.6.0"}
   ]
 end
 ```
