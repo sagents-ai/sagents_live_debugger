@@ -1,5 +1,29 @@
 # Changelog
 
+## v0.5.0
+
+Renders the `:length`, `:content_filtered` and `:stream_error` message statuses
+added in `sagents` v0.12.1 and `langchain` v0.10.0. The debugger interpolates the
+status atom into a class name, so each new value produced a class that matched no
+CSS rule and the badge rendered unstyled.
+
+**Breaking:** the `sagents` requirement moves from `~> 0.8` to `~> 0.12`.
+
+### Upgrading from v0.4.1 - v0.5.0
+
+Upgrade `sagents` to `~> 0.12` in your host application. The router macro and its
+options are unchanged.
+
+### Added
+- Badge coloring for the `:length`, `:content_filtered` and `:stream_error` message statuses, plus a tooltip naming what each status means [#39](https://github.com/sagents-ai/sagents_live_debugger/pull/39)
+- A stop note between a message's header and body carrying the provider's description of the cause, from `stop_details` or `streaming_error` [#39](https://github.com/sagents-ai/sagents_live_debugger/pull/39)
+
+### Changed
+- **Breaking:** `sagents` requirement raised from `~> 0.8` to `~> 0.12` [#39](https://github.com/sagents-ai/sagents_live_debugger/pull/39)
+- Status badges resolve through `DisplayHelpers.stop_reason/1`, so a dead stream badges alike on either side of the `langchain` v0.10.0 status split [#39](https://github.com/sagents-ai/sagents_live_debugger/pull/39)
+- `:cancelled` badges neutral gray, reserving red for `:stream_error` [#39](https://github.com/sagents-ai/sagents_live_debugger/pull/39)
+- Added `lazy_html` as a test-only dependency [#39](https://github.com/sagents-ai/sagents_live_debugger/pull/39)
+
 ## v0.4.1
 
 Widens the `sagents` dependency constraint from `~> 0.8.0` to `~> 0.8` so the
