@@ -2118,6 +2118,7 @@ defmodule SagentsLiveDebugger.AgentListLive do
       :pending -> "⏸️"
       :in_progress -> "▶️"
       :completed -> "✅"
+      :cancelled -> "🚫"
       _other -> "❓"
     end
   end
