@@ -4,6 +4,7 @@
 
 ### Fixed
 - Cancelled todos render a 🚫 icon instead of the unknown-status ❓. `:cancelled` is one of the four statuses `Sagents.Todo` defines, but the todo view's icon mapping covered only the other three [#42](https://github.com/sagents-ai/sagents_live_debugger/pull/42)
+- Cancelled todos are styled. `.todo-badge` defines only shape and leaves color to the per-status rules, so with no `.todo-badge.status-cancelled` the badge rendered as bare unfilled text, and the row had no left-border color. A cancelled item now reads as set aside rather than failed: neutral gray with an outlined badge, a dashed left edge, and struck-through content
 
 ## v0.6.0
 
