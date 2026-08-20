@@ -1,5 +1,10 @@
 # Changelog
 
+## v0.6.1
+
+### Fixed
+- Cancelled todos render a 🚫 icon instead of the unknown-status ❓. `:cancelled` is one of the four statuses `Sagents.Todo` defines, but the todo view's icon mapping covered only the other three [#42](https://github.com/sagents-ai/sagents_live_debugger/pull/42)
+
 ## v0.6.0
 
 ### Changed

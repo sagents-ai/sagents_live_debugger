@@ -2,7 +2,7 @@ defmodule SagentsLiveDebugger.MixProject do
   use Mix.Project
 
   @source_url "https://github.com/sagents-ai/sagents_live_debugger"
-  @version "0.6.0"
+  @version "0.6.1"
 
   def project do
     [
