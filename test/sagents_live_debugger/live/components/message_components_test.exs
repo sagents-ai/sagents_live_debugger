@@ -6,6 +6,7 @@ defmodule SagentsLiveDebugger.Live.Components.MessageComponentsTest do
   alias LangChain.LangChainError
   alias LangChain.Message
   alias LangChain.Message.ContentPart
+  alias LangChain.Message.ToolResult
   alias SagentsLiveDebugger.Live.Components.MessageComponents
   alias Sagents.MiddlewareEntry
 
@@ -119,12 +120,114 @@ defmodule SagentsLiveDebugger.Live.Components.MessageComponentsTest do
     |> LazyHTML.from_fragment()
   end
 
+  defp render_tool_result(tool_result) do
+    render_component(&MessageComponents.tool_result_item/1, tool_result: tool_result)
+    |> LazyHTML.from_fragment()
+  end
+
   defp has_node?(doc, selector) do
     doc |> LazyHTML.query(selector) |> Enum.any?()
   end
 
   defp text(doc, selector) do
     doc |> LazyHTML.query(selector) |> LazyHTML.text() |> String.trim()
+  end
+
+  describe "tool_result_item/1 content" do
+    test "shows the text the LLM received, not the ContentPart structs" do
+      result =
+        ToolResult.new!(%{
+          tool_call_id: "call-1",
+          name: "list_accounts",
+          content: "Accounts:\n- #9 Anytime Checking: $714.71 balance"
+        })
+
+      html = render_component(&MessageComponents.tool_result_item/1, tool_result: result)
+      doc = LazyHTML.from_fragment(html)
+
+      assert text(doc, "pre.tool-result-text") =~ "Anytime Checking: $714.71 balance"
+      refute html =~ "ContentPart"
+      refute html =~ "%LangChain"
+    end
+
+    test "indents a JSON object and highlights it" do
+      result =
+        ToolResult.new!(%{
+          tool_call_id: "call-1",
+          content: ~s({"accounts":[{"id":9,"balance":714.71}]})
+        })
+
+      doc = render_tool_result(result)
+
+      assert has_node?(doc, ".tool-result-content .highlighted-code")
+      refute has_node?(doc, "pre.tool-result-text")
+
+      shown = text(doc, ".tool-result-content")
+      assert shown =~ ~r/\n\s+"accounts"/
+      assert shown =~ "714.71"
+    end
+
+    test "keeps the key order the tool wrote" do
+      result =
+        ToolResult.new!(%{tool_call_id: "call-1", content: ~s({"zebra":1,"apple":2})})
+
+      doc = render_tool_result(result)
+      shown = text(doc, ".tool-result-content")
+
+      assert shown =~ ~r/"zebra".*"apple"/s
+    end
+
+    test "a JSON-shaped string that does not parse stays plain text" do
+      result = ToolResult.new!(%{tool_call_id: "call-1", content: "[broken, not json"})
+
+      doc = render_tool_result(result)
+
+      assert text(doc, "pre.tool-result-text") == "[broken, not json"
+      refute has_node?(doc, ".tool-result-content .highlighted-code")
+    end
+
+    test "joins multiple text parts" do
+      result =
+        ToolResult.new!(%{
+          tool_call_id: "call-1",
+          content: [ContentPart.text!("first half"), ContentPart.text!("second half")]
+        })
+
+      assert text(render_tool_result(result), "pre.tool-result-text") ==
+               "first half\n\nsecond half"
+    end
+
+    test "renders a non-text part through content_part/1" do
+      result =
+        ToolResult.new!(%{
+          tool_call_id: "call-1",
+          content: [ContentPart.image!("base64data", media: :png)]
+        })
+
+      doc = render_tool_result(result)
+
+      assert has_node?(doc, ".tool-result-content .content-part-image")
+      refute has_node?(doc, "pre.tool-result-text")
+    end
+
+    test "marks an empty result instead of rendering a blank block" do
+      doc = render_tool_result(%ToolResult{tool_call_id: "call-1", content: nil})
+
+      assert text(doc, ".tool-result-empty") == "(no content)"
+      refute has_node?(doc, "pre.tool-result-text")
+    end
+  end
+
+  describe "format_tool_result/1" do
+    test "returns the joined text of a ContentPart list" do
+      parts = [ContentPart.text!("one"), ContentPart.text!("two")]
+      assert MessageComponents.format_tool_result(parts) == "one\n\ntwo"
+    end
+
+    test "indents JSON and leaves prose alone" do
+      assert MessageComponents.format_tool_result(~s({"a":1})) == "{\n  \"a\": 1\n}"
+      assert MessageComponents.format_tool_result("just prose") == "just prose"
+    end
   end
 
   describe "inspect_for_display/1" do

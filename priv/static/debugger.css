@@ -731,6 +731,17 @@ td {
   line-height: 1.5;
 }
 
+.tool-result-content pre.tool-result-text {
+  white-space: pre-wrap;
+  overflow-wrap: anywhere;
+}
+
+.tool-result-empty {
+  color: #9ca3af;
+  font-style: italic;
+  font-size: 0.875rem;
+}
+
 .result-status {
   padding: 0.125rem 0.5rem;
   border-radius: 0.25rem;

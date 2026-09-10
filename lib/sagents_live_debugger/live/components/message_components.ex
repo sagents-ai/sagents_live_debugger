@@ -303,11 +303,15 @@ defmodule SagentsLiveDebugger.Live.Components.MessageComponents do
     is_interrupt = Map.get(assigns.tool_result, :is_interrupt, false)
     interrupt_data = Map.get(assigns.tool_result, :interrupt_data)
 
+    {result_format, result_body} = result_display(assigns.tool_result.content)
+
     assigns =
       assigns
       |> assign(:is_interrupt, is_interrupt)
       |> assign(:interrupt_data, interrupt_data)
       |> assign(:formatted_interrupt_data, format_interrupt_data(interrupt_data))
+      |> assign(:result_format, result_format)
+      |> assign(:result_body, result_body)
 
     ~H"""
     <div class="tool-result">
@@ -333,10 +337,16 @@ defmodule SagentsLiveDebugger.Live.Components.MessageComponents do
         </div>
       <% end %>
       <div class="tool-result-content">
-        <.highlight_code
-          code={format_tool_result(@tool_result.content)}
-          language={detect_result_language(@tool_result.content)}
-        />
+        <%= case @result_format do %>
+          <% :json -> %>
+            <.highlight_code code={@result_body} language="json" />
+          <% :text -> %>
+            <pre class="tool-result-text" phx-no-format><%= @result_body %></pre>
+          <% :parts -> %>
+            <.content_part :for={part <- @result_body} part={part} />
+          <% :empty -> %>
+            <span class="tool-result-empty">(no content)</span>
+        <% end %>
       </div>
     </div>
     """
@@ -347,16 +357,6 @@ defmodule SagentsLiveDebugger.Live.Components.MessageComponents do
   defp format_interrupt_data(data) do
     inspect(data, pretty: true, limit: :infinity)
   end
-
-  defp detect_result_language(content) when is_binary(content) do
-    if String.match?(content, ~r/^\s*[\{\[]/) do
-      "json"
-    else
-      "elixir"
-    end
-  end
-
-  defp detect_result_language(_), do: "elixir"
 
   @doc """
   Renders a tool item with expandable description and parameters.
@@ -721,28 +721,84 @@ defmodule SagentsLiveDebugger.Live.Components.MessageComponents do
   end
 
   def format_tool_arguments(arguments) when is_binary(arguments) do
-    case Jason.decode(arguments) do
-      {:ok, decoded} -> Jason.encode!(decoded, pretty: true)
-      {:error, _} -> arguments
+    case pretty_json(arguments) do
+      {:ok, pretty} -> pretty
+      :error -> arguments
     end
-  rescue
-    _other -> arguments
   end
 
   def format_tool_arguments(arguments),
     do: inspect_for_display(arguments)
 
-  def format_tool_result(content) when is_binary(content) do
-    case Jason.decode(content) do
-      {:ok, decoded} -> Jason.encode!(decoded, pretty: true)
-      {:error, _} -> content
+  @doc """
+  Returns a tool result's `content` as display text.
+  """
+  def format_tool_result(content) do
+    case result_display(content) do
+      {:parts, parts} -> inspect_for_display(parts)
+      {_format, body} -> body
     end
-  rescue
-    _other -> content
   end
 
-  def format_tool_result(content),
-    do: inspect_for_display(content)
+  @doc """
+  Classifies a tool result's `content` for display as `{format, body}`.
+
+  `content` holds what was sent to the LLM: a list of ContentParts, or a plain
+  string. Text parts are joined and returned as `{:json, pretty}` when the text
+  is a JSON object or array, otherwise as `{:text, text}`. Content carrying
+  anything other than text (an image, a file) is returned as `{:parts, parts}`
+  for `content_part/1` to render. Absent or empty content is `{:empty, ""}`.
+  """
+  @spec result_display(term()) :: {:json | :text | :parts | :empty, String.t() | list()}
+  def result_display(content) do
+    parts = List.wrap(content)
+
+    if Enum.all?(parts, &text_part?/1) do
+      parts |> Enum.map_join("\n\n", &part_text/1) |> text_display()
+    else
+      {:parts, parts}
+    end
+  end
+
+  defp text_part?(part) when is_binary(part), do: true
+  defp text_part?(part), do: is_map(part) and Map.get(part, :type) == :text
+
+  defp part_text(part) when is_binary(part), do: part
+
+  # A part can carry `content: nil`, which would raise in a join.
+  defp part_text(part) do
+    case Map.get(part, :content) do
+      text when is_binary(text) -> text
+      _other -> ""
+    end
+  end
+
+  defp text_display(""), do: {:empty, ""}
+
+  defp text_display(text) do
+    case pretty_json(text) do
+      {:ok, pretty} -> {:json, pretty}
+      :error -> {:text, text}
+    end
+  end
+
+  # Only an object or array counts as JSON. A bare scalar like `42` decodes
+  # cleanly but reads better as the string the tool returned.
+  #
+  # `Jason.decode/1` is the validity gate and its result is discarded;
+  # `Jason.Formatter.pretty_print/1` then re-indents the original text, which
+  # keeps key order, number literals, and escapes exactly as the tool wrote
+  # them. It requires valid JSON, hence the gate.
+  defp pretty_json(text) do
+    with true <- String.match?(text, ~r/^\s*[\{\[]/),
+         {:ok, _valid} <- Jason.decode(text) do
+      {:ok, Jason.Formatter.pretty_print(text)}
+    else
+      _other -> :error
+    end
+  rescue
+    _other -> :error
+  end
 
   # Middleware helper functions
 
