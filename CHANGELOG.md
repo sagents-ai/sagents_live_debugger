@@ -1,5 +1,17 @@
 # Changelog
 
+## v0.6.2
+
+### Added
+- Content parts show their utterance marker. A text part labeled `"narration"` (the model describing work in progress, such as OpenAI's `"commentary"` phase) or `"answer"` gets a badge, and narration gets a left-edge rule. A thinking block marked narration is headed "🗣️ Progress update" instead of "💭 Thinking". Parts with no marker render as before [#47](https://github.com/sagents-ai/sagents_live_debugger/pull/47)
+- Message previews in the agent list prefer the answer over a preamble in front of it, and a message that is only narration previews with a `(narration)` prefix [#47](https://github.com/sagents-ai/sagents_live_debugger/pull/47)
+- The Model section notes that it shows the running agent's configuration, which is not restored with a conversation, so earlier messages may have come from a different model [#47](https://github.com/sagents-ai/sagents_live_debugger/pull/47)
+
+### Changed
+- Tool results render by content type. JSON objects and arrays are pretty-printed with their key order and literals intact, plain text renders as wrapped text instead of being highlighted as Elixir, multi-part text is joined, results carrying images or files render through the content part view, and empty results show "(no content)" [#45](https://github.com/sagents-ai/sagents_live_debugger/pull/45)
+- Tests pin the `Sagents.Subscriber.handle_presence_diff/3` and `handle_publisher_down/3` return shapes the debugger matches on [#46](https://github.com/sagents-ai/sagents_live_debugger/pull/46)
+- CI lint job runs on Elixir 1.20 / OTP 29 [#47](https://github.com/sagents-ai/sagents_live_debugger/pull/47)
+
 ## v0.6.1
 
 ### Fixed
