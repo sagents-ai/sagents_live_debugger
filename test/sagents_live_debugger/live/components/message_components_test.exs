@@ -408,7 +408,7 @@ defmodule SagentsLiveDebugger.Live.Components.MessageComponentsTest do
     # restored from a store arrives as plain maps, and its options may be a
     # keyword list or a string-keyed map depending on where it came from.
 
-    test "reads a ContentPart through its own accessor" do
+    test "reads a ContentPart struct" do
       assert MessageComponents.part_utterance(ContentPart.narration!("x")) == "narration"
       assert MessageComponents.part_utterance(ContentPart.answer!("x")) == "answer"
       assert MessageComponents.part_utterance(ContentPart.text!("x")) == nil

@@ -11,7 +11,6 @@ defmodule SagentsLiveDebugger.Live.Components.MessageComponents do
   import SagentsLiveDebugger.CoreComponents, only: [highlight_code: 1]
 
   alias LangChain.Message
-  alias LangChain.Message.ContentPart
   alias Sagents.Message.DisplayHelpers
 
   @doc """
@@ -313,14 +312,17 @@ defmodule SagentsLiveDebugger.Live.Components.MessageComponents do
   Returns a content part's utterance marker: `"narration"`, `"answer"`, or
   `nil` when it carries none.
 
-  Reads a `LangChain.Message.ContentPart` through its own accessor. The other
-  clauses exist because the parts reaching these components are not always
-  structs: state restored from a store arrives as plain maps, and its options
-  may be a keyword list or a string-keyed map depending on where it came from.
+  Reads the `:utterance` key of the part's options directly rather than calling
+  `LangChain.Message.ContentPart.utterance/1`, which does not exist in every
+  `langchain` version the `sagents` requirement admits. Under a `langchain`
+  that predates the marker, no part carries one and every part returns `nil`.
+
+  A `LangChain.Message.ContentPart` struct is read like any other map. The parts
+  reaching these components are not always structs: state restored from a store
+  arrives as plain maps, and its options may be a keyword list or a string-keyed
+  map depending on where it came from.
   """
   @spec part_utterance(term()) :: String.t() | nil
-  def part_utterance(%ContentPart{} = part), do: ContentPart.utterance(part)
-
   def part_utterance(part) when is_map(part) do
     part |> Map.get(:options) |> utterance_from_options()
   end
