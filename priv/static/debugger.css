@@ -222,6 +222,15 @@ td {
   cursor: not-allowed;
 }
 
+/* A caveat under a value, for where the value is true now but not necessarily
+   true of the history shown beside it. */
+.info-note {
+  margin: 0.5rem 0 0;
+  font-size: 0.75rem;
+  line-height: 1.4;
+  color: #6b7280;
+}
+
 .empty-state {
   text-align: center;
   padding: 3rem;
@@ -590,6 +599,40 @@ td {
 
 .content-part-text {
   /* whitespace handling from .formatted-content */
+}
+
+/* Utterance marker (narration vs answer)
+
+   Some models label an assistant text part as narration: the model saying what
+   it is about to do rather than answering. A debugger's job is to show that
+   the label is there and what it says, so the badge is explicit rather than
+   styled into the background. Narration additionally gets a rule down its left
+   edge, which makes a run that is mostly preamble legible at a glance. */
+.content-part-text-wrapper[data-utterance="narration"] {
+  border-left: 3px solid #c7d2fe;
+  padding-left: 0.625rem;
+}
+
+.utterance-badge {
+  margin-left: 0;
+  margin-bottom: 0.25rem;
+  text-transform: uppercase;
+  letter-spacing: 0.03em;
+  font-size: 0.6875rem;
+}
+
+.utterance-badge-narration {
+  background: #e0e7ff;
+  color: #3730a3;
+}
+
+.utterance-badge-answer {
+  background: #dcfce7;
+  color: #166534;
+}
+
+.content-part-thinking[data-utterance="narration"] .thinking-label {
+  color: #3730a3;
 }
 
 .content-part-image,
