@@ -11,6 +11,7 @@ defmodule SagentsLiveDebugger.Live.Components.MessageComponents do
   import SagentsLiveDebugger.CoreComponents, only: [highlight_code: 1]
 
   alias LangChain.Message
+  alias LangChain.Message.ContentPart
   alias Sagents.Message.DisplayHelpers
 
   @doc """
@@ -216,24 +217,35 @@ defmodule SagentsLiveDebugger.Live.Components.MessageComponents do
 
     cond do
       is_map(part) && Map.get(part, :type) == :text ->
-        assigns = %{text: Map.get(part, :content, "")}
+        assigns = %{text: Map.get(part, :content, ""), utterance: part_utterance(part)}
 
         ~H"""
-        <div class="formatted-content content-part-text" phx-no-format><%= @text %></div>
+        <div class="content-part-text-wrapper" data-utterance={@utterance}>
+          <.utterance_label utterance={@utterance} />
+          <div class="formatted-content content-part-text" phx-no-format><%= @text %></div>
+        </div>
         """
 
       is_map(part) && Map.get(part, :type) == :thinking ->
         # Generate unique ID for this thinking block
         thinking_id = "#{prefix}thinking-#{:erlang.phash2(part)}"
 
+        utterance = part_utterance(part)
+
         assigns = %{
           content: Map.get(part, :content, ""),
           thinking_id: thinking_id,
-          toggle_id: "toggle-#{thinking_id}"
+          toggle_id: "toggle-#{thinking_id}",
+          utterance: utterance,
+          # A thinking block marked narration is a progress update: written for
+          # the person watching rather than as reasoning. Saying so in the
+          # header is the difference between reading it as the model's private
+          # working and reading it as a status report.
+          label: if(utterance == "narration", do: "🗣️ Progress update", else: "💭 Thinking")
         }
 
         ~H"""
-        <div class="content-part-thinking">
+        <div class="content-part-thinking" data-utterance={@utterance}>
           <div
             class="thinking-header"
             phx-click={
@@ -241,7 +253,7 @@ defmodule SagentsLiveDebugger.Live.Components.MessageComponents do
               |> Phoenix.LiveView.JS.toggle_class("collapsed", to: "##{@toggle_id}")
             }
           >
-            <span class="thinking-label">💭 Thinking</span>
+            <span class="thinking-label">{@label}</span>
             <span class="toggle-icon collapsed" id={@toggle_id}></span>
           </div>
           <div class="thinking-content-wrapper" id={@thinking_id} style="display: none;">
@@ -267,6 +279,129 @@ defmodule SagentsLiveDebugger.Live.Components.MessageComponents do
           <.highlight_code code={@inspected} />
         </div>
         """
+    end
+  end
+
+  attr :utterance, :string, default: nil
+
+  @doc """
+  Renders the label for a content part's utterance marker.
+
+  Renders nothing when the part carries no marker, which is every provider
+  that does not label its output.
+  """
+  def utterance_label(%{utterance: nil} = assigns), do: ~H""
+
+  def utterance_label(assigns) do
+    ~H"""
+    <span
+      class={"badge utterance-badge utterance-badge-#{@utterance}"}
+      title={utterance_hint(@utterance)}
+    >
+      {@utterance}
+    </span>
+    """
+  end
+
+  defp utterance_hint("narration"),
+    do: "The model describing work in progress. Does not end the turn."
+
+  defp utterance_hint("answer"), do: "The model's reply."
+  defp utterance_hint(_utterance), do: nil
+
+  @doc """
+  Returns a content part's utterance marker: `"narration"`, `"answer"`, or
+  `nil` when it carries none.
+
+  Reads a `LangChain.Message.ContentPart` through its own accessor. The other
+  clauses exist because the parts reaching these components are not always
+  structs: state restored from a store arrives as plain maps, and its options
+  may be a keyword list or a string-keyed map depending on where it came from.
+  """
+  @spec part_utterance(term()) :: String.t() | nil
+  def part_utterance(%ContentPart{} = part), do: ContentPart.utterance(part)
+
+  def part_utterance(part) when is_map(part) do
+    part |> Map.get(:options) |> utterance_from_options()
+  end
+
+  def part_utterance(_part), do: nil
+
+  defp utterance_from_options(options) when is_list(options) do
+    if Keyword.keyword?(options) do
+      options |> Keyword.get(:utterance) |> normalize_utterance()
+    end
+  end
+
+  defp utterance_from_options(options) when is_map(options) do
+    (Map.get(options, :utterance) || Map.get(options, "utterance"))
+    |> normalize_utterance()
+  end
+
+  defp utterance_from_options(_options), do: nil
+
+  defp normalize_utterance(utterance) when utterance in ["narration", "answer"], do: utterance
+  defp normalize_utterance(_utterance), do: nil
+
+  @doc """
+  A short preview of a message's text, for a list where only one line fits.
+
+  Prefers the answer over a preamble sitting in front of it, and says so when
+  the message is only the model describing work in progress. Previewing the
+  first text part would show the preamble and hide the reply.
+  """
+  @spec extract_text_preview(term()) :: String.t()
+  def extract_text_preview(content_parts) when is_list(content_parts) do
+    content_parts
+    |> Enum.flat_map(fn
+      %{type: :text, content: text} = part when is_binary(text) -> [{part_utterance(part), text}]
+      text when is_binary(text) -> [{nil, text}]
+      _other -> []
+    end)
+    |> preview_text(50)
+  end
+
+  def extract_text_preview(_content_parts), do: ""
+
+  @doc """
+  A longer preview of a message's content, accepting either a plain string or a
+  list of content parts. Prefers the answer the same way `extract_text_preview/1`
+  does.
+  """
+  @spec extract_content_preview(term()) :: String.t()
+  def extract_content_preview(content) when is_binary(content), do: String.slice(content, 0, 100)
+
+  def extract_content_preview(content) when is_list(content) do
+    content
+    |> Enum.flat_map(fn
+      part when is_map(part) ->
+        if Map.get(part, :type) == :text,
+          do: [{part_utterance(part), Map.get(part, :content) || ""}],
+          else: []
+
+      _other ->
+        []
+    end)
+    |> preview_text(100)
+  end
+
+  def extract_content_preview(content), do: inspect(content, limit: 100)
+
+  # Non-narration text wins. Falling back to narration rather than to nothing
+  # keeps a narrated turn from looking like an empty message, and the marker
+  # says why it is not a reply.
+  defp preview_text(texts, limit) do
+    case Enum.split_with(texts, fn {utterance, _text} -> utterance != "narration" end) do
+      {[_ | _] = answers, _narration} ->
+        answers |> Enum.map_join(" ", &elem(&1, 1)) |> String.slice(0, limit)
+
+      {[], [_ | _] = narration} ->
+        narration
+        |> Enum.map_join(" ", &elem(&1, 1))
+        |> then(&String.slice("(narration) " <> &1, 0, limit))
+
+      {[], []} ->
+        ""
     end
   end
 

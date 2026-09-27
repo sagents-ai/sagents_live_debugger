@@ -1745,6 +1745,11 @@ defmodule SagentsLiveDebugger.AgentListLive do
     """
   end
 
+  # An agent's model is code-defined: it comes from the host's factory when the
+  # agent starts, and is not part of the state a conversation restores. So this
+  # is what the agent is running right now, which for an older conversation is
+  # not necessarily what produced the messages above it. The note says so,
+  # because a model name shown beside old messages reads as a claim about them.
   defp model_section(assigns) do
     ~H"""
     <div class="info-section">
@@ -1755,6 +1760,11 @@ defmodule SagentsLiveDebugger.AgentListLive do
             <span class="info-label">Model:</span>
             <span class="info-value">{@agent.model.model}</span>
           </div>
+          <p class="info-note">
+            The running agent's configuration, built by the host's factory when this
+            agent started. It is not restored with the conversation, so earlier
+            messages may have been produced by a different model.
+          </p>
           <%= if @agent.model.temperature do %>
             <div class="info-row">
               <span class="info-label">Temperature:</span>
@@ -2165,33 +2175,7 @@ defmodule SagentsLiveDebugger.AgentListLive do
     end
   end
 
-  # Helper to extract text preview from message content (handles both string and ContentPart list)
-  defp extract_content_preview(content) when is_binary(content) do
-    String.slice(content, 0, 100)
-  end
-
-  defp extract_content_preview(content) when is_list(content) do
-    # Extract text from ContentPart structs
-    content
-    |> Enum.filter(fn part -> is_map(part) && Map.get(part, :type) == :text end)
-    |> Enum.map(fn part -> Map.get(part, :content, "") end)
-    |> Enum.join(" ")
-    |> String.slice(0, 100)
-  end
-
-  defp extract_content_preview(content) do
-    inspect(content, limit: 100)
-  end
-
   # Helper to extract text preview from content parts (for Issue #3)
-  defp extract_text_preview(content_parts) do
-    content_parts
-    |> Enum.find_value("", fn
-      %{type: :text, content: text} when is_binary(text) -> String.slice(text, 0, 50)
-      text when is_binary(text) -> String.slice(text, 0, 50)
-      _other -> nil
-    end)
-  end
 
   defp format_event_data(event) do
     case event do

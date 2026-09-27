@@ -338,4 +338,164 @@ defmodule SagentsLiveDebugger.Live.Components.MessageComponentsTest do
       assert summary.real_data == "kept"
     end
   end
+
+  describe "utterance marker on content parts" do
+    defp render_parts(parts) do
+      %Message{role: :assistant, content: parts, status: :complete}
+      |> render_message()
+    end
+
+    test "a narration part is badged and set apart" do
+      doc = render_parts([ContentPart.narration!("Checking the logs.")])
+
+      assert has_node?(doc, "[data-utterance='narration']")
+      assert text(doc, ".utterance-badge") == "narration"
+      assert text(doc, ".content-part-text") == "Checking the logs."
+    end
+
+    test "an answer part is badged as the answer" do
+      doc = render_parts([ContentPart.answer!("Out of memory.")])
+
+      assert has_node?(doc, "[data-utterance='answer']")
+      assert text(doc, ".utterance-badge") == "answer"
+    end
+
+    test "an unmarked part carries no badge" do
+      doc = render_parts([ContentPart.text!("Plain reply.")])
+
+      refute has_node?(doc, ".utterance-badge")
+      refute has_node?(doc, "[data-utterance]")
+      assert text(doc, ".content-part-text") == "Plain reply."
+    end
+
+    test "a message holding both is labelled part by part, in order" do
+      doc =
+        render_parts([
+          ContentPart.narration!("Checking the logs."),
+          ContentPart.answer!("Out of memory.")
+        ])
+
+      badges =
+        doc
+        |> LazyHTML.query(".utterance-badge")
+        |> Enum.map(&(&1 |> LazyHTML.text() |> String.trim()))
+
+      assert badges == ["narration", "answer"]
+    end
+
+    test "a thinking block marked narration reads as a progress update" do
+      part =
+        %{type: :thinking, content: "Reading the events next."}
+        |> ContentPart.new!()
+        |> ContentPart.put_utterance("narration")
+
+      doc = render_parts([part])
+
+      assert text(doc, ".thinking-label") =~ "Progress update"
+      assert has_node?(doc, ".content-part-thinking[data-utterance='narration']")
+    end
+
+    test "an unmarked thinking block still reads as thinking" do
+      doc = render_parts([ContentPart.thinking!("Working through it.")])
+
+      assert text(doc, ".thinking-label") =~ "Thinking"
+      refute has_node?(doc, ".content-part-thinking[data-utterance]")
+    end
+  end
+
+  describe "part_utterance/1" do
+    # The parts reaching these components are not always structs: state
+    # restored from a store arrives as plain maps, and its options may be a
+    # keyword list or a string-keyed map depending on where it came from.
+
+    test "reads a ContentPart through its own accessor" do
+      assert MessageComponents.part_utterance(ContentPart.narration!("x")) == "narration"
+      assert MessageComponents.part_utterance(ContentPart.answer!("x")) == "answer"
+      assert MessageComponents.part_utterance(ContentPart.text!("x")) == nil
+    end
+
+    test "reads a plain map with keyword options" do
+      part = %{type: :text, content: "x", options: [utterance: "narration"]}
+      assert MessageComponents.part_utterance(part) == "narration"
+    end
+
+    test "reads a plain map with string-keyed map options" do
+      part = %{type: :text, content: "x", options: %{"utterance" => "answer"}}
+      assert MessageComponents.part_utterance(part) == "answer"
+    end
+
+    test "returns nil for options it cannot read, rather than raising" do
+      for options <- [nil, [], ["not", "a", "keyword", "list"], %{}, "nonsense"] do
+        part = %{type: :text, content: "x", options: options}
+        assert MessageComponents.part_utterance(part) == nil
+      end
+    end
+
+    test "returns nil for an unrecognized marker value" do
+      part = %{type: :text, content: "x", options: [utterance: "something_new"]}
+      assert MessageComponents.part_utterance(part) == nil
+    end
+
+    test "returns nil for a non-map" do
+      assert MessageComponents.part_utterance("just text") == nil
+      assert MessageComponents.part_utterance(nil) == nil
+    end
+  end
+
+  describe "text previews" do
+    test "previews the answer, not the preamble in front of it" do
+      parts = [
+        ContentPart.narration!("Checking the deployment status and events now."),
+        ContentPart.answer!("The image tag does not exist.")
+      ]
+
+      assert MessageComponents.extract_text_preview(parts) == "The image tag does not exist."
+      assert MessageComponents.extract_content_preview(parts) == "The image tag does not exist."
+    end
+
+    test "a message that is only narration says so rather than looking empty" do
+      parts = [ContentPart.narration!("Reading the events next.")]
+
+      assert MessageComponents.extract_text_preview(parts) ==
+               "(narration) Reading the events next."
+
+      assert MessageComponents.extract_content_preview(parts) ==
+               "(narration) Reading the events next."
+    end
+
+    test "unmarked parts preview as they always did" do
+      assert MessageComponents.extract_text_preview([ContentPart.text!("Plain reply.")]) ==
+               "Plain reply."
+
+      assert MessageComponents.extract_content_preview([ContentPart.text!("Plain reply.")]) ==
+               "Plain reply."
+    end
+
+    test "a string content previews directly" do
+      assert MessageComponents.extract_content_preview("Just a string.") == "Just a string."
+    end
+
+    test "non-text parts are skipped" do
+      parts = [ContentPart.thinking!("reasoning"), ContentPart.answer!("Done.")]
+
+      assert MessageComponents.extract_text_preview(parts) == "Done."
+      assert MessageComponents.extract_content_preview(parts) == "Done."
+    end
+
+    test "nothing previewable yields an empty string" do
+      assert MessageComponents.extract_text_preview([]) == ""
+      assert MessageComponents.extract_content_preview([]) == ""
+      assert MessageComponents.extract_text_preview(nil) == ""
+    end
+
+    test "previews are truncated" do
+      long = String.duplicate("a", 200)
+
+      assert String.length(MessageComponents.extract_text_preview([ContentPart.text!(long)])) ==
+               50
+
+      assert String.length(MessageComponents.extract_content_preview([ContentPart.text!(long)])) ==
+               100
+    end
+  end
 end
