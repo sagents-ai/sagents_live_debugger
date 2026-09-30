@@ -1,5 +1,10 @@
 # Changelog
 
+## v0.6.3
+
+### Fixed
+- Failed tool results are marked as errors in the Messages view. The result card read only `is_interrupt`, so a result with `is_error: true` rendered with ✅ like a success, even though the event log and the host app's chat showed the failure. Failed results now get ❌, a red `ERROR` badge and a red-tinted card. Exceptions raised inside a tool carry `is_error` too and are badged the same way. Hosts that depend on the debugger by path need `mix deps.compile sagents_live_debugger --force` to pick up the new card styling [#49](https://github.com/sagents-ai/sagents_live_debugger/pull/49)
+
 ## v0.6.2
 
 ### Added
