@@ -433,11 +433,15 @@ defmodule SagentsLiveDebugger.Live.Components.MessageComponents do
 
   @doc """
   Renders a tool result item.
+
+  A result the tool reported as failed (`is_error`) is badged as an error. An
+  exception raised inside the tool arrives with `is_error` set as well.
   """
   attr :tool_result, :map, required: true
 
   def tool_result_item(assigns) do
     is_interrupt = Map.get(assigns.tool_result, :is_interrupt, false)
+    is_error = Map.get(assigns.tool_result, :is_error, false)
     interrupt_data = Map.get(assigns.tool_result, :interrupt_data)
 
     {result_format, result_body} = result_display(assigns.tool_result.content)
@@ -445,19 +449,24 @@ defmodule SagentsLiveDebugger.Live.Components.MessageComponents do
     assigns =
       assigns
       |> assign(:is_interrupt, is_interrupt)
+      |> assign(:is_error, is_error)
       |> assign(:interrupt_data, interrupt_data)
       |> assign(:formatted_interrupt_data, format_interrupt_data(interrupt_data))
       |> assign(:result_format, result_format)
       |> assign(:result_body, result_body)
 
     ~H"""
-    <div class="tool-result">
+    <div class={["tool-result", @is_error && "tool-result-error"]}>
       <div class="tool-result-header">
-        <%= if @is_interrupt do %>
-          <span class="tool-name">✋ {@tool_result.name || "Result"}</span>
-          <span class="result-status status-interrupted">INTERRUPTED</span>
-        <% else %>
-          <span class="tool-name">✅ {@tool_result.name || "Result"}</span>
+        <%= cond do %>
+          <% @is_interrupt -> %>
+            <span class="tool-name">✋ {@tool_result.name || "Result"}</span>
+            <span class="result-status status-interrupted">INTERRUPTED</span>
+          <% @is_error -> %>
+            <span class="tool-name">❌ {@tool_result.name || "Result"}</span>
+            <span class="result-status status-error">ERROR</span>
+          <% true -> %>
+            <span class="tool-name">✅ {@tool_result.name || "Result"}</span>
         <% end %>
         <%= if @tool_result.tool_call_id do %>
           <span class="tool-call-id">{@tool_result.tool_call_id}</span>
