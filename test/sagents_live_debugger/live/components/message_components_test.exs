@@ -218,6 +218,50 @@ defmodule SagentsLiveDebugger.Live.Components.MessageComponentsTest do
     end
   end
 
+  describe "tool_result_item/1 outcome" do
+    test "badges a failed result as an error" do
+      result =
+        ToolResult.new!(%{
+          tool_call_id: "call-1",
+          name: "get_weather",
+          content: "Missing required argument: city",
+          is_error: true
+        })
+
+      doc = render_tool_result(result)
+
+      assert has_node?(doc, ".tool-result.tool-result-error")
+      assert text(doc, ".result-status.status-error") == "ERROR"
+      assert text(doc, ".tool-name") =~ "❌"
+      refute text(doc, ".tool-name") =~ "✅"
+    end
+
+    test "a successful result carries no error badge" do
+      result = ToolResult.new!(%{tool_call_id: "call-1", name: "get_weather", content: "Sunny"})
+
+      doc = render_tool_result(result)
+
+      refute has_node?(doc, ".tool-result-error")
+      refute has_node?(doc, ".status-error")
+      assert text(doc, ".tool-name") =~ "✅"
+    end
+
+    test "an interrupt is badged as interrupted rather than as an error" do
+      result =
+        ToolResult.new!(%{
+          tool_call_id: "call-1",
+          name: "delete_file",
+          content: "Awaiting approval",
+          is_interrupt: true
+        })
+
+      doc = render_tool_result(result)
+
+      assert text(doc, ".result-status.status-interrupted") == "INTERRUPTED"
+      refute has_node?(doc, ".status-error")
+    end
+  end
+
   describe "format_tool_result/1" do
     test "returns the joined text of a ContentPart list" do
       parts = [ContentPart.text!("one"), ContentPart.text!("two")]

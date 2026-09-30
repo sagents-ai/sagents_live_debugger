@@ -731,6 +731,11 @@ td {
   border-radius: 0.375rem;
 }
 
+.tool-result.tool-result-error {
+  border-color: #fca5a5;
+  background: #fef2f2;
+}
+
 .tool-call-header,
 .tool-result-header {
   display: flex;
