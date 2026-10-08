@@ -6,7 +6,7 @@ defmodule SagentsLiveDebugger.AgentListLive do
   import SagentsLiveDebugger.Live.Components.SubagentsTab
   import SagentsLiveDebugger.Live.Components.MessageComponents
   import SagentsLiveDebugger.Live.Components.FilterConfig
-  alias SagentsLiveDebugger.{Metrics, FilterForm}
+  alias SagentsLiveDebugger.{Metrics, FilterForm, UserRequests}
   alias Sagents.Subscriber
 
   # Presence topics for debugger discovery
@@ -1864,13 +1864,23 @@ defmodule SagentsLiveDebugger.AgentListLive do
 
         <div class="messages-header">
           <h3>💬 Conversation Messages ({length(@state.messages)})</h3>
+          <span
+            :if={UserRequests.current_seq(@state)}
+            class="message-badge message-badge-request"
+            title="The current user request number"
+          >
+            current request #{UserRequests.current_seq(@state)}
+          </span>
         </div>
 
         <%= if Enum.empty?(@state.messages) do %>
           <p class="empty-state">No messages yet</p>
         <% else %>
           <div class="messages-list">
-            <%= for {message, index} <- Enum.with_index(@state.messages) do %>
+            <%= for {message, index, divider_seq} <- UserRequests.with_dividers(@state.messages) do %>
+              <div :if={divider_seq} class="user-request-divider">
+                User request #{divider_seq}
+              </div>
               <.message_item message={message} index={index} />
             <% end %>
           </div>
@@ -2000,6 +2010,17 @@ defmodule SagentsLiveDebugger.AgentListLive do
             <div class="event-field">
               <span class="event-label">Action:</span>
               <span class="event-value">{@event_data.event.action}</span>
+            </div>
+          <% end %>
+
+          <%= if @event_data.event.type == "user_request_completed" do %>
+            <div class="event-field">
+              <span class="event-label">Assistant Messages:</span>
+              <span class="event-value">{@event_data.event.assistant_message_count}</span>
+            </div>
+            <div class="event-field">
+              <span class="event-label">Tool Calls:</span>
+              <span class="event-value">{@event_data.event.tool_calls_label}</span>
             </div>
           <% end %>
 
@@ -2428,6 +2449,10 @@ defmodule SagentsLiveDebugger.AgentListLive do
       # Sub-agent events - wrapped as {:subagent, sub_agent_id, inner_event}
       {:subagent, sub_agent_id, inner_event} ->
         format_subagent_event(sub_agent_id, inner_event)
+
+      {user_request_event, _data}
+      when user_request_event in [:user_request_started, :user_request_completed] ->
+        UserRequests.format_event(event)
 
       other ->
         # Generic fallback for unknown events

@@ -106,6 +106,38 @@ defmodule SagentsLiveDebugger.Live.Components.MessageComponentsTest do
     end
   end
 
+  describe "message_item/1 user request" do
+    test "badges the request number, summary flag and token usage" do
+      doc =
+        render_message(
+          assistant("Answer.",
+            status: :complete,
+            metadata: %{
+              user_request_seq: 2,
+              summary: true,
+              usage: %LangChain.TokenUsage{input: 120, output: 40},
+              subagent_usage: %LangChain.TokenUsage{input: 900, output: 75}
+            }
+          )
+        )
+
+      assert text(doc, ".message-badge-request") == "req #2"
+      assert has_node?(doc, ".message-badge-summary")
+
+      assert text(doc, ".message-usage-tokens:not(.message-usage-subagent) .token-input") ==
+               "↑120"
+
+      assert text(doc, ".message-usage-subagent .token-output") == "↓75"
+    end
+
+    test "renders none of it for a message that records none of it" do
+      doc = render_message(assistant("Answer.", status: :complete))
+
+      refute has_node?(doc, ".message-badge")
+      refute has_node?(doc, ".message-usage")
+    end
+  end
+
   defp assistant(text, fields) do
     %Message{
       role: :assistant,

@@ -462,6 +462,9 @@ td {
 }
 
 .messages-header {
+  display: flex;
+  align-items: center;
+  gap: 0.75rem;
   margin-bottom: 1rem;
 }
 
@@ -550,6 +553,65 @@ td {
 .message-status.status-content_filtered {
   background: #ffedd5;
   color: #9a3412;
+}
+
+/* User request tracking. Rendered only when the message or state carries it,
+   so these never appear for a sagents version that does not record it. */
+.message-badge {
+  padding: 0.125rem 0.5rem;
+  border-radius: 0.25rem;
+  font-size: 0.75rem;
+  font-weight: 600;
+  white-space: nowrap;
+}
+
+.message-badge-request {
+  background: #ede9fe;
+  color: #5b21b6;
+  font-family: ui-monospace, SFMono-Regular, Menlo, monospace;
+}
+
+.message-badge-summary {
+  background: #e0f2fe;
+  color: #075985;
+}
+
+.message-usage {
+  margin-left: auto;
+  display: flex;
+  gap: 0.75rem;
+  font-size: 0.75rem;
+  color: #6b7280;
+}
+
+.message-usage-tokens {
+  display: inline-flex;
+  gap: 0.375rem;
+  align-items: center;
+}
+
+.message-usage-subagent {
+  padding-left: 0.75rem;
+  border-left: 1px solid #e5e7eb;
+}
+
+.user-request-divider {
+  display: flex;
+  align-items: center;
+  gap: 0.75rem;
+  margin-top: 0.5rem;
+  font-size: 0.75rem;
+  font-weight: 600;
+  letter-spacing: 0.05em;
+  text-transform: uppercase;
+  color: #6d28d9;
+}
+
+.user-request-divider::after {
+  content: "";
+  flex: 1;
+  height: 1px;
+  background: #ddd6fe;
 }
 
 .message-status.status-stream_error {
