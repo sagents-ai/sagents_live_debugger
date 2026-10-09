@@ -1,5 +1,15 @@
 # Changelog
 
+## v0.6.4
+
+Displays the user request tracking added in `sagents` v0.17.0. A user request is one human message and all the work done for it. Every new display reads its data only when present, so agents running older `sagents` versions render as before and the `sagents` requirement stays at `~> 0.12`.
+
+### Added
+- The Messages view groups messages by user request. A "User request #N" divider opens each request, the header shows the agent's current request number, and each message carries a `req #N` badge [#51](https://github.com/sagents-ai/sagents_live_debugger/pull/51)
+- Messages show the tokens they used (↑ input, ↓ output). A `task` tool message also shows the tokens its sub-agent spent across its run [#51](https://github.com/sagents-ai/sagents_live_debugger/pull/51)
+- A message that summarization put in place of older history gets a `summary` badge [#51](https://github.com/sagents-ai/sagents_live_debugger/pull/51)
+- The event stream formats the `:user_request_started` and `:user_request_completed` events. A completed request's details list its status, assistant message count, and tool calls by name and count [#51](https://github.com/sagents-ai/sagents_live_debugger/pull/51)
+
 ## v0.6.3
 
 ### Fixed
