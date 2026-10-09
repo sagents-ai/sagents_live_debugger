@@ -12,6 +12,7 @@ defmodule SagentsLiveDebugger.Live.Components.MessageComponents do
 
   alias LangChain.Message
   alias Sagents.Message.DisplayHelpers
+  alias SagentsLiveDebugger.UserRequests
 
   @doc """
   Renders a single message item with role emoji, content, tool calls/results, and metadata.
@@ -28,6 +29,7 @@ defmodule SagentsLiveDebugger.Live.Components.MessageComponents do
           {String.capitalize(to_string(@message.role))}
         </span>
         <.message_status message={@message} />
+        <.message_user_request message={@message} />
       </div>
 
       <.message_stop_note message={@message} />
@@ -84,6 +86,58 @@ defmodule SagentsLiveDebugger.Live.Components.MessageComponents do
     ~H"""
     <span :if={@status} class={"message-status status-#{@status}"} title={@explanation}>
       {@status}
+    </span>
+    """
+  end
+
+  @doc """
+  Renders what a message records about the user request it served: the
+  request number, a summary badge when it replaced older history, and the
+  tokens it used, with a sub-agent's usage shown separately.
+
+  Each is rendered only when the message carries it, so messages from sagents
+  versions that do not record them render as before.
+  """
+  attr :message, :map, required: true
+
+  def message_user_request(assigns) do
+    message = assigns.message
+
+    assigns =
+      assigns
+      |> assign(:seq, UserRequests.seq(message))
+      |> assign(:summary?, UserRequests.summary?(message))
+      |> assign(:usage, UserRequests.usage(message))
+      |> assign(:subagent_usage, UserRequests.usage(message, :subagent_usage))
+
+    ~H"""
+    <span
+      :if={@seq}
+      class="message-badge message-badge-request"
+      title="The user request this message was produced under"
+    >
+      req #{@seq}
+    </span>
+    <span
+      :if={@summary?}
+      class="message-badge message-badge-summary"
+      title="Summarization replaced older history with this message"
+    >
+      summary
+    </span>
+    <span :if={@usage || @subagent_usage} class="message-usage">
+      <span :if={@usage} class="message-usage-tokens" title="Tokens this message used">
+        <span class="token-input">↑{@usage.input}</span>
+        <span class="token-output">↓{@usage.output}</span>
+      </span>
+      <span
+        :if={@subagent_usage}
+        class="message-usage-tokens message-usage-subagent"
+        title="Tokens the sub-agent used across its run"
+      >
+        sub-agent <span class="token-input">↑{@subagent_usage.input}</span>
+        <span class="token-output">↓{@subagent_usage.output}</span>
+      </span>
     </span>
     """
   end
