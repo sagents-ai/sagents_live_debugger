@@ -456,6 +456,32 @@ td {
   color: #991b1b;
 }
 
+/* Ability sets: the set a tool or prompt is sent for */
+.badge-ability-set {
+  background: #dcfce7;
+  color: #166534;
+  font-family: 'Courier New', monospace;
+}
+
+.badge-ability-set-none {
+  background: #f3f4f6;
+  color: #4b5563;
+}
+
+.ability-set-summary {
+  margin: -0.5rem 0 1rem;
+  font-size: 0.875rem;
+  color: #6b7280;
+}
+
+.ability-set-summary .badge {
+  margin-left: 0.25rem;
+}
+
+.inactive-tools .list-item-name {
+  color: #6b7280;
+}
+
 /* Messages Tab */
 .messages-tab {
   padding: 0;

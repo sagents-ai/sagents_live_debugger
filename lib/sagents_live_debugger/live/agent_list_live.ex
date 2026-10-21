@@ -6,7 +6,7 @@ defmodule SagentsLiveDebugger.AgentListLive do
   import SagentsLiveDebugger.Live.Components.SubagentsTab
   import SagentsLiveDebugger.Live.Components.MessageComponents
   import SagentsLiveDebugger.Live.Components.FilterConfig
-  alias SagentsLiveDebugger.{Metrics, FilterForm, UserRequests}
+  alias SagentsLiveDebugger.{AbilitySets, Metrics, FilterForm, UserRequests}
   alias Sagents.Subscriber
 
   # Presence topics for debugger discovery
@@ -1321,7 +1321,7 @@ defmodule SagentsLiveDebugger.AgentListLive do
             <% :middleware -> %>
               <.middleware_tab agent={@agent_detail} />
             <% :tools -> %>
-              <.tools_tab agent={@agent_detail} />
+              <.tools_tab agent={@agent_detail} state={@agent_state} />
             <% :events -> %>
               <.events_tab event_stream={@event_stream} user_timezone={@user_timezone} />
             <% :todos -> %>
@@ -1639,7 +1639,7 @@ defmodule SagentsLiveDebugger.AgentListLive do
     ~H"""
     <div class="overview-tab">
       <%= if @metadata do %>
-        <.agent_info_section agent={@agent} metadata={@metadata} />
+        <.agent_info_section agent={@agent} metadata={@metadata} state={@state} />
         <.detail_status_section metadata={@metadata} started_at={@started_at} />
         <%= if @agent do %>
           <.model_section agent={@agent} />
@@ -1652,6 +1652,8 @@ defmodule SagentsLiveDebugger.AgentListLive do
   end
 
   defp agent_info_section(assigns) do
+    assigns = assign(assigns, :ability_sets, AbilitySets.view(assigns.agent, assigns.state))
+
     ~H"""
     <div class="info-section">
       <h3>🔍 Agent Information</h3>
@@ -1682,6 +1684,15 @@ defmodule SagentsLiveDebugger.AgentListLive do
           <span class="info-label">Run Mode:</span>
           <span class="info-value">{format_mode(@agent.mode)}</span>
         </div>
+        <%= if @ability_sets && @ability_sets.enabled? do %>
+          <div class="info-row" id="overview-ability-set">
+            <span class="info-label">Ability Set:</span>
+            <span class="info-value">
+              <.ability_set_name active={@ability_sets.active} />
+              <span class="info-note">of {Enum.join(@ability_sets.sets, ", ")}</span>
+            </span>
+          </div>
+        <% end %>
       </div>
     </div>
     """
@@ -1728,20 +1739,54 @@ defmodule SagentsLiveDebugger.AgentListLive do
   # get_model_name, format_config_key, format_config_value, and format_module_name
   # are now imported from SagentsLiveDebugger.Live.Components.MessageComponents
 
+  # The tools sent on the next LLM call. With ability sets, that is the rails
+  # plus the active set's tools, and the rest of the agent's tools are listed
+  # separately with the sets that provide them.
   defp tools_section(assigns) do
+    assigns = assign(assigns, :view, AbilitySets.view(assigns.agent, assigns.state))
+
     ~H"""
     <div class="info-section">
-      <h3>🛠️ Tools ({length(@agent.tools)})</h3>
-      <%= if Enum.empty?(@agent.tools) do %>
+      <h3>🛠️ Tools ({length(@view.tools)})</h3>
+      <%= if @view.enabled? do %>
+        <p class="ability-set-summary" id="tools-ability-set">
+          Sent for ability set
+          <.ability_set_name active={@view.active} />. {length(@view.inactive_tools)} more belong to other sets.
+        </p>
+      <% end %>
+      <%= if Enum.empty?(@view.tools) do %>
         <p class="empty-state">No tools available</p>
       <% else %>
-        <div class="list-card">
-          <%= for tool <- @agent.tools do %>
+        <div class="list-card" id="active-tools">
+          <%= for tool <- @view.tools do %>
             <.tool_item tool={tool} prefix="main-" />
           <% end %>
         </div>
       <% end %>
     </div>
+
+    <%= if @view.inactive_tools != [] do %>
+      <div class="info-section inactive-tools">
+        <h3>💤 Inactive in this ability set ({length(@view.inactive_tools)})</h3>
+        <div class="list-card" id="inactive-tools">
+          <%= for {tool, sets} <- @view.inactive_tools do %>
+            <.tool_item tool={tool} prefix="inactive-" ability_sets={sets} />
+          <% end %>
+        </div>
+      </div>
+    <% end %>
+    """
+  end
+
+  attr :active, :string, default: nil
+
+  defp ability_set_name(assigns) do
+    ~H"""
+    <%= if @active do %>
+      <span class="badge badge-ability-set">{@active}</span>
+    <% else %>
+      <span class="badge badge-ability-set-none">none (rails only)</span>
+    <% end %>
     """
   end
 
@@ -1780,11 +1825,17 @@ defmodule SagentsLiveDebugger.AgentListLive do
   end
 
   # System Message Sections Component
+  #
+  # The assembled prompt is the one sent on the next LLM call. With ability
+  # sets it is the active set's prompt, read from the current state, so it
+  # follows each switch.
   defp system_message_sections(assigns) do
+    assigns = assign(assigns, :view, AbilitySets.view(assigns.agent, assigns.state))
+
     ~H"""
     <div class="system-messages-container">
       <!-- Assembled System Prompt -->
-      <%= if @agent.assembled_system_prompt && @agent.assembled_system_prompt != "" do %>
+      <%= if @view.system_prompt && @view.system_prompt != "" do %>
         <div class="system-message-section">
           <div class="system-message-card">
             <div
@@ -1798,16 +1849,26 @@ defmodule SagentsLiveDebugger.AgentListLive do
                 <span class="system-message-icon">⚙️</span>
                 <span>Assembled System Prompt</span>
                 <span class="system-message-badge">Active Configuration</span>
+                <%= if @view.enabled? do %>
+                  <span id="system-prompt-ability-set">
+                    <.ability_set_name active={@view.active} />
+                  </span>
+                <% end %>
               </div>
               <span class="toggle-icon collapsed" id="toggle-assembled"></span>
             </div>
 
             <div class="system-message-content-wrapper" id="content-assembled" style="display: none;">
-              <div class="formatted-content system-message-content" phx-no-format><%= @agent.assembled_system_prompt %></div>
+              <div class="formatted-content system-message-content" phx-no-format><%= @view.system_prompt %></div>
               <div class="system-message-info">
                 <small>
-                  ℹ️ This is the complete system message sent to the LLM, including contributions from all middleware.
-                  It is prepended to conversation messages and protected from summarization.
+                  <%= if @view.enabled? do %>
+                    ℹ️ This is the complete system message sent to the LLM for the active ability set, including
+                    contributions from the always-on middleware and the set's middleware. It changes when the set changes.
+                  <% else %>
+                    ℹ️ This is the complete system message sent to the LLM, including contributions from all middleware.
+                    It is prepended to conversation messages and protected from summarization.
+                  <% end %>
                 </small>
               </div>
             </div>
@@ -1859,7 +1920,7 @@ defmodule SagentsLiveDebugger.AgentListLive do
       <%= if @state && @state.messages do %>
         <!-- System Message Sections -->
         <%= if @agent do %>
-          <.system_message_sections agent={@agent} />
+          <.system_message_sections agent={@agent} state={@state} />
         <% end %>
 
         <div class="messages-header">
@@ -1917,7 +1978,7 @@ defmodule SagentsLiveDebugger.AgentListLive do
     ~H"""
     <div class="tools-tab">
       <%= if @agent do %>
-        <.tools_section agent={@agent} />
+        <.tools_section agent={@agent} state={@state} />
       <% else %>
         <p class="loading">Loading tools data...</p>
       <% end %>

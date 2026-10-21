@@ -564,9 +564,13 @@ defmodule SagentsLiveDebugger.Live.Components.MessageComponents do
 
   The prefix attribute is used to create unique DOM IDs when the same tool
   is displayed in multiple contexts (e.g., main agent vs sub-agent views).
+
+  The ability_sets attribute names the sets a tool belongs to, shown as badges
+  beside its name.
   """
   attr :tool, :map, required: true
   attr :prefix, :string, default: ""
+  attr :ability_sets, :list, default: []
 
   def tool_item(assigns) do
     # Extract tool fields safely (works for both structs and maps)
@@ -604,6 +608,9 @@ defmodule SagentsLiveDebugger.Live.Components.MessageComponents do
           {@tool_name}
           <%= if @tool_async do %>
             <span class="badge badge-async">Async</span>
+          <% end %>
+          <%= for set <- @ability_sets do %>
+            <span class="badge badge-ability-set">{set}</span>
           <% end %>
         </span>
         <span class="toggle-icon collapsed" id={@toggle_id}></span>
