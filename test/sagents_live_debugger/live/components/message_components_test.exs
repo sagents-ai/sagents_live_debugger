@@ -165,6 +165,30 @@ defmodule SagentsLiveDebugger.Live.Components.MessageComponentsTest do
     doc |> LazyHTML.query(selector) |> LazyHTML.text() |> String.trim()
   end
 
+  describe "tool_item/1 ability sets" do
+    test "badges each set the tool belongs to" do
+      tool = %{name: "list_devices", description: "Lists devices."}
+
+      doc =
+        render_component(&MessageComponents.tool_item/1,
+          tool: tool,
+          ability_sets: ["devices", "ops"]
+        )
+        |> LazyHTML.from_fragment()
+
+      assert doc |> LazyHTML.query(".badge-ability-set") |> Enum.map(&LazyHTML.text/1) ==
+               ["devices", "ops"]
+    end
+
+    test "shows no set badge by default" do
+      doc =
+        render_component(&MessageComponents.tool_item/1, tool: %{name: "lookup"})
+        |> LazyHTML.from_fragment()
+
+      refute has_node?(doc, ".badge-ability-set")
+    end
+  end
+
   describe "tool_result_item/1 content" do
     test "shows the text the LLM received, not the ContentPart structs" do
       result =
