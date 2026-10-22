@@ -1,5 +1,17 @@
 # Changelog
 
+## v0.6.5
+
+Displays the ability sets added in `sagents` v0.18.0 (`Sagents.Middleware.AbilitySetSwitcher`). An agent with ability sets keeps every set's middleware, so its full tool list and its assembled prompt do not match what the next LLM call sends. The debugger now shows the tools and system prompt for the active set and updates them when the set changes. Agents without ability sets, and agents running older `sagents` versions, render as before. The `sagents` requirement stays at `~> 0.12`.
+
+### Added
+- The Overview tab shows the agent's active ability set and the names of all its sets [#52](https://github.com/sagents-ai/sagents_live_debugger/pull/52)
+- The Tools tab lists the tools sent for the active set. An "Inactive in this ability set" section lists the other tools, each with a badge for every set that provides it [#52](https://github.com/sagents-ai/sagents_live_debugger/pull/52)
+- The Messages tab's "Assembled System Prompt" card shows the active set's prompt and a badge naming the set [#52](https://github.com/sagents-ai/sagents_live_debugger/pull/52)
+
+### Changed
+- Updated dev and test dependencies: `sagents` 0.18.0, `langchain` 0.15.4, `phoenix` 1.8.16, `decimal` 3.2.0
+
 ## v0.6.4
 
 Displays the user request tracking added in `sagents` v0.17.0. A user request is one human message and all the work done for it. Every new display reads its data only when present, so agents running older `sagents` versions render as before and the `sagents` requirement stays at `~> 0.12`.
