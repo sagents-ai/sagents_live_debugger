@@ -5,11 +5,11 @@ defmodule SagentsLiveDebugger.UserRequests do
   `:user_request_completed` events.
 
   A user request is one human message and all the work done for it. Sagents
-  versions that track them stamp each message's `metadata[:user_request_seq]`,
-  keep the current number in `Sagents.State.user_request_seq`, and broadcast
-  the two events. Older versions do none of this, so every read here tolerates
-  the key, field or event being absent and returns `nil` in that case. Callers
-  render nothing for `nil`.
+  stamps each message's `metadata[:user_request_seq]`, keeps the current number
+  in `Sagents.State.user_request_seq`, and broadcasts the two events. A message
+  stored before its conversation tracked user requests carries none of this,
+  so every read here tolerates the key being absent and returns `nil` in that
+  case. Callers render nothing for `nil`.
   """
 
   @doc """

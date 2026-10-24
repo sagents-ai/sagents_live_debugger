@@ -11,7 +11,10 @@ defmodule SagentsLiveDebugger.Live.Components.MessageComponents do
   import SagentsLiveDebugger.CoreComponents, only: [highlight_code: 1]
 
   alias LangChain.Message
+  alias LangChain.Message.ContentPart
+  alias LangChain.NativeTool
   alias Sagents.Message.DisplayHelpers
+  alias Sagents.ToolSearch
   alias SagentsLiveDebugger.UserRequests
 
   @doc """
@@ -95,8 +98,8 @@ defmodule SagentsLiveDebugger.Live.Components.MessageComponents do
   request number, a summary badge when it replaced older history, and the
   tokens it used, with a sub-agent's usage shown separately.
 
-  Each is rendered only when the message carries it, so messages from sagents
-  versions that do not record them render as before.
+  Each is rendered only when the message carries it, so a message stored
+  before its conversation tracked user requests renders without them.
   """
   attr :message, :map, required: true
 
@@ -315,6 +318,50 @@ defmodule SagentsLiveDebugger.Live.Components.MessageComponents do
         </div>
         """
 
+      provider_item?(part) ->
+        assigns = provider_item_assigns(part, prefix)
+
+        ~H"""
+        <div
+          class="content-part-provider-item"
+          data-provider-item-type={@item_type}
+          data-search={@kind}
+        >
+          <div
+            class="provider-item-header"
+            phx-click={
+              Phoenix.LiveView.JS.toggle(to: "##{@raw_id}")
+              |> Phoenix.LiveView.JS.toggle_class("collapsed", to: "##{@toggle_id}")
+            }
+          >
+            <span class="provider-item-label">{@label}</span>
+            <span :if={@query} class="provider-item-query">“{@query}”</span>
+            <span :if={@provider} class="badge badge-provider">{@provider}</span>
+            <span class="provider-item-type">{@item_type}</span>
+            <span class="toggle-icon collapsed" id={@toggle_id}></span>
+          </div>
+          <div :if={@namespaces != [] or @tools != []} class="provider-item-chips">
+            <span :for={namespace <- @namespaces} class="provider-item-chip provider-item-namespace">
+              {namespace}
+            </span>
+            <span :for={tool <- @tools} class="provider-item-chip">{tool}</span>
+          </div>
+          <div class="provider-item-raw" id={@raw_id} style="display: none;">
+            <.highlight_code code={@raw} language="json" />
+          </div>
+        </div>
+        """
+
+      tool_reference?(part) ->
+        assigns = %{name: Map.get(part, :content)}
+
+        ~H"""
+        <div class="content-part-tool-reference">
+          <span class="provider-item-label">↪ Tool reference</span>
+          <span class="provider-item-chip">{@name}</span>
+        </div>
+        """
+
       is_map(part) && Map.get(part, :type) == :image ->
         assigns = %{part: part, inspected: inspect_for_display(part)}
 
@@ -334,6 +381,68 @@ defmodule SagentsLiveDebugger.Live.Components.MessageComponents do
         """
     end
   end
+
+  # A provider item holds a block or item a provider produced and expects back
+  # unchanged, such as a tool search call and its result.
+  defp provider_item?(%ContentPart{type: :provider_item}), do: true
+  defp provider_item?(_part), do: false
+
+  defp tool_reference?(%ContentPart{type: :tool_reference}), do: true
+  defp tool_reference?(_part), do: false
+
+  defp provider_item_assigns(%ContentPart{} = part, prefix) do
+    # The block as it goes back to the provider. A streamed Anthropic
+    # `server_tool_use` holds its input as JSON text in the part's `content`
+    # until it is replayed; `provider_item_block/1` puts it under `"input"`.
+    item = ContentPart.provider_item_block(part)
+    id = "#{prefix}provider-item-#{:erlang.phash2(part)}"
+
+    %{
+      item_type: Map.get(item, "type", "unknown"),
+      provider: Keyword.get(part.options || [], :provider),
+      raw_id: id,
+      toggle_id: "toggle-#{id}",
+      raw: Jason.encode!(item, pretty: true)
+    }
+    |> Map.merge(describe_provider_item(item))
+  end
+
+  defp describe_provider_item(item) do
+    case ToolSearch.read_search_item(item) do
+      {:call, %{query: query}} ->
+        provider_item_summary("call", "🔎 Tool search", query: query)
+
+      {:result, %{error?: true}} ->
+        provider_item_summary("error", "⚠️ Tool search failed#{error_code(item)}")
+
+      {:result, %{namespaces: [], tools: []}} ->
+        provider_item_summary("result", "📭 Tool search found nothing")
+
+      {:result, %{namespaces: namespaces, tools: tools}} ->
+        provider_item_summary("result", "🧰 Tools loaded", namespaces: namespaces, tools: tools)
+
+      nil ->
+        other_provider_item(item)
+    end
+  end
+
+  defp other_provider_item(%{"type" => "server_tool_use", "name" => name}),
+    do: provider_item_summary(nil, "🛠️ Server tool: #{name}")
+
+  defp other_provider_item(_item), do: provider_item_summary(nil, "📦 Provider item")
+
+  defp provider_item_summary(kind, label, opts \\ []) do
+    %{
+      kind: kind,
+      label: label,
+      query: Keyword.get(opts, :query),
+      namespaces: Keyword.get(opts, :namespaces, []),
+      tools: Keyword.get(opts, :tools, [])
+    }
+  end
+
+  defp error_code(%{"content" => %{"error_code" => code}}) when is_binary(code), do: ": #{code}"
+  defp error_code(_item), do: ""
 
   attr :utterance, :string, default: nil
 
@@ -364,40 +473,12 @@ defmodule SagentsLiveDebugger.Live.Components.MessageComponents do
 
   @doc """
   Returns a content part's utterance marker: `"narration"`, `"answer"`, or
-  `nil` when it carries none.
-
-  Reads the `:utterance` key of the part's options directly rather than calling
-  `LangChain.Message.ContentPart.utterance/1`, which does not exist in every
-  `langchain` version the `sagents` requirement admits. Under a `langchain`
-  that predates the marker, no part carries one and every part returns `nil`.
-
-  A `LangChain.Message.ContentPart` struct is read like any other map. The parts
-  reaching these components are not always structs: state restored from a store
-  arrives as plain maps, and its options may be a keyword list or a string-keyed
-  map depending on where it came from.
+  `nil` when it carries none. Anything other than a
+  `LangChain.Message.ContentPart` carries none.
   """
   @spec part_utterance(term()) :: String.t() | nil
-  def part_utterance(part) when is_map(part) do
-    part |> Map.get(:options) |> utterance_from_options()
-  end
-
+  def part_utterance(%ContentPart{} = part), do: ContentPart.utterance(part)
   def part_utterance(_part), do: nil
-
-  defp utterance_from_options(options) when is_list(options) do
-    if Keyword.keyword?(options) do
-      options |> Keyword.get(:utterance) |> normalize_utterance()
-    end
-  end
-
-  defp utterance_from_options(options) when is_map(options) do
-    (Map.get(options, :utterance) || Map.get(options, "utterance"))
-    |> normalize_utterance()
-  end
-
-  defp utterance_from_options(_options), do: nil
-
-  defp normalize_utterance(utterance) when utterance in ["narration", "answer"], do: utterance
-  defp normalize_utterance(_utterance), do: nil
 
   @doc """
   A short preview of a message's text, for a list where only one line fits.
@@ -567,10 +648,17 @@ defmodule SagentsLiveDebugger.Live.Components.MessageComponents do
 
   The ability_sets attribute names the sets a tool belongs to, shown as badges
   beside its name.
+
+  A deferred function (provider tool search) is badged `Deferred` with its
+  namespace. When `loaded` is a set of tool names, a deferred function is also
+  marked as loaded or not yet loaded in the conversation. A provider-defined
+  tool (`LangChain.NativeTool`) has no description of its own, so it is badged
+  `Provider tool` and described here, with its configuration.
   """
   attr :tool, :map, required: true
   attr :prefix, :string, default: ""
   attr :ability_sets, :list, default: []
+  attr :loaded, :any, default: nil
 
   def tool_item(assigns) do
     # Extract tool fields safely (works for both structs and maps)
@@ -578,9 +666,9 @@ defmodule SagentsLiveDebugger.Live.Components.MessageComponents do
     prefix = assigns[:prefix] || ""
 
     tool_name = get_tool_field(tool, :name)
-    tool_async = get_tool_field(tool, :async)
-    tool_description = get_tool_field(tool, :description)
-    tool_parameters = get_tool_field(tool, :parameters) || []
+    native? = match?(%NativeTool{}, tool)
+    options = tool_options(tool)
+    deferred? = Keyword.get(options, :defer_loading) == true
 
     # Generate unique IDs for this tool item
     tool_id = "#{prefix}tool-#{:erlang.phash2(tool_name)}"
@@ -591,12 +679,20 @@ defmodule SagentsLiveDebugger.Live.Components.MessageComponents do
       |> assign(:tool_id, tool_id)
       |> assign(:toggle_id, toggle_id)
       |> assign(:tool_name, tool_name)
-      |> assign(:tool_async, tool_async)
-      |> assign(:tool_description, tool_description)
-      |> assign(:tool_parameters, tool_parameters)
+      |> assign(:tool_async, get_tool_field(tool, :async))
+      |> assign(:native?, native?)
+      |> assign(:tool_description, tool_description(tool))
+      |> assign(
+        :configuration,
+        native? && tool.configuration not in [nil, %{}] && tool.configuration
+      )
+      |> assign(:tool_parameters, tool_parameters(tool))
+      |> assign(:deferred?, deferred?)
+      |> assign(:namespace, Keyword.get(options, :namespace))
+      |> assign(:load_state, load_state(deferred?, tool_name, assigns[:loaded]))
 
     ~H"""
-    <div class="list-item">
+    <div class="list-item" data-tool-name={@tool_name}>
       <div
         class="list-item-header middleware-header-clickable"
         phx-click={
@@ -609,6 +705,11 @@ defmodule SagentsLiveDebugger.Live.Components.MessageComponents do
           <%= if @tool_async do %>
             <span class="badge badge-async">Async</span>
           <% end %>
+          <span :if={@native?} class="badge badge-provider-tool">Provider tool</span>
+          <span :if={@deferred?} class="badge badge-deferred">Deferred</span>
+          <span :if={@namespace} class="badge badge-namespace">{@namespace}</span>
+          <span :if={@load_state == :loaded} class="badge badge-loaded">Loaded</span>
+          <span :if={@load_state == :not_loaded} class="badge badge-not-loaded">Not loaded</span>
           <%= for set <- @ability_sets do %>
             <span class="badge badge-ability-set">{set}</span>
           <% end %>
@@ -618,16 +719,84 @@ defmodule SagentsLiveDebugger.Live.Components.MessageComponents do
 
       <div class="middleware-content" id={@tool_id} style="display: none;">
         <div class="list-item-description" style="white-space: pre-wrap;" phx-no-format><%= @tool_description || "No description available" %></div>
+        <%= if @configuration do %>
+          <div class="list-item-details">
+            <strong>Configuration:</strong>
+            <.highlight_code code={Jason.encode!(@configuration, pretty: true)} language="json" />
+          </div>
+        <% end %>
         <%= if @tool_parameters != [] do %>
           <div class="list-item-details">
             <strong>Parameters:</strong>
-            <ul phx-no-format><%= for param <- @tool_parameters do %><li style="white-space: pre-wrap;"><code><%= get_tool_field(param, :name) %></code><%= if get_tool_field(param, :required) do %> <span class="badge badge-required">Required</span><% end %> - <%= get_tool_field(param, :description) %></li><% end %></ul>
+            <ul phx-no-format><%= for param <- @tool_parameters do %><li style="white-space: pre-wrap;"><code><%= param.name %></code><%= if param.required do %> <span class="badge badge-required">Required</span><% end %><%= if param.description do %> - <%= param.description %><% end %></li><% end %></ul>
           </div>
         <% end %>
       </div>
     </div>
     """
   end
+
+  # A provider-defined tool is described by the provider, not by the app, so
+  # the chat model sends no description for it. The debugger explains the ones
+  # it knows.
+  defp tool_description(%NativeTool{name: "tool_search"}) do
+    "Defined by the provider and sent without a description. Lets the model search " <>
+      "for deferred tools and load them into its context. Added by " <>
+      "Sagents.Middleware.ToolSearch; chat models without tool search leave it out " <>
+      "and send every tool."
+  end
+
+  defp tool_description(%NativeTool{}),
+    do: "Defined by the provider and sent without a description. See its configuration below."
+
+  defp tool_description(tool), do: get_tool_field(tool, :description)
+
+  defp tool_options(tool) do
+    case get_tool_field(tool, :options) do
+      options when is_list(options) -> if Keyword.keyword?(options), do: options, else: []
+      _other -> []
+    end
+  end
+
+  defp load_state(true, name, %MapSet{} = loaded),
+    do: if(MapSet.member?(loaded, name), do: :loaded, else: :not_loaded)
+
+  defp load_state(_deferred?, _name, _loaded), do: nil
+
+  # Parameters as `%{name, required, description}`, from a function's
+  # `LangChain.FunctionParam` list or, failing that, its JSON schema.
+  defp tool_parameters(tool) do
+    case get_tool_field(tool, :parameters) do
+      [_ | _] = params ->
+        Enum.map(params, fn param ->
+          %{
+            name: get_tool_field(param, :name),
+            required: get_tool_field(param, :required) == true,
+            description: get_tool_field(param, :description)
+          }
+        end)
+
+      _none ->
+        schema_parameters(get_tool_field(tool, :parameters_schema))
+    end
+  end
+
+  defp schema_parameters(%{} = schema) do
+    properties = get_tool_field(schema, :properties) || %{}
+    required = (get_tool_field(schema, :required) || []) |> Enum.map(&to_string/1)
+
+    Enum.map(properties, fn {name, property} ->
+      name = to_string(name)
+
+      %{
+        name: name,
+        required: name in required,
+        description: is_map(property) && get_tool_field(property, :description)
+      }
+    end)
+  end
+
+  defp schema_parameters(_schema), do: []
 
   # Helper to safely access tool fields from either structs or maps
   defp get_tool_field(tool, field) when is_struct(tool) do

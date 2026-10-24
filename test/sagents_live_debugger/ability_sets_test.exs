@@ -7,9 +7,6 @@ defmodule SagentsLiveDebugger.AbilitySetsTest do
   alias Sagents.State
   alias SagentsLiveDebugger.AbilitySets
 
-  # `Sagents.AbilitySets` exists only in Sagents versions with ability sets.
-  @ability_sets_available Code.ensure_loaded?(Sagents.AbilitySets)
-
   defp model, do: ChatAnthropic.new!(%{model: "claude-sonnet-4-5"})
 
   defp tool(name) do
@@ -34,26 +31,12 @@ defmodule SagentsLiveDebugger.AbilitySetsTest do
       assert view.system_prompt == agent.assembled_system_prompt
     end
 
-    test "reads an agent from a Sagents version with no ability index" do
-      agent = %{tools: [tool("lookup")], assembled_system_prompt: "Prompt."}
-
-      view = AbilitySets.view(agent, nil)
-
-      refute view.enabled?
-      assert Enum.map(view.tools, & &1.name) == ["lookup"]
-      assert view.system_prompt == "Prompt."
-    end
-
     test "returns nil when there is no agent" do
       assert AbilitySets.view(nil, State.new!()) == nil
     end
   end
 
   describe "an agent with ability sets" do
-    if not @ability_sets_available do
-      @describetag skip: "this Sagents version has no ability sets"
-    end
-
     setup do
       {:ok, agent} =
         Agent.new(
