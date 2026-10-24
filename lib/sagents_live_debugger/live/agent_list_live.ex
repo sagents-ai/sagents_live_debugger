@@ -7,6 +7,7 @@ defmodule SagentsLiveDebugger.AgentListLive do
   import SagentsLiveDebugger.Live.Components.MessageComponents
   import SagentsLiveDebugger.Live.Components.FilterConfig
   alias SagentsLiveDebugger.{AbilitySets, Metrics, FilterForm, UserRequests}
+  alias SagentsLiveDebugger.ToolSearch, as: ToolSearchView
   alias Sagents.Subscriber
 
   # Presence topics for debugger discovery
@@ -1742,8 +1743,19 @@ defmodule SagentsLiveDebugger.AgentListLive do
   # The tools sent on the next LLM call. With ability sets, that is the rails
   # plus the active set's tools, and the rest of the agent's tools are listed
   # separately with the sets that provide them.
+  #
+  # With provider tool search, deferred tools are badged with their namespace
+  # and whether the conversation has loaded them, and a panel lists the
+  # namespaces and the catalog the system prompt carries.
   defp tools_section(assigns) do
-    assigns = assign(assigns, :view, AbilitySets.view(assigns.agent, assigns.state))
+    view = AbilitySets.view(assigns.agent, assigns.state)
+    tool_search = ToolSearchView.view(assigns.agent, assigns.state, view.tools)
+
+    assigns =
+      assigns
+      |> assign(:view, view)
+      |> assign(:tool_search, tool_search)
+      |> assign(:loaded, tool_search && tool_search.loaded)
 
     ~H"""
     <div class="info-section">
@@ -1759,24 +1771,91 @@ defmodule SagentsLiveDebugger.AgentListLive do
       <% else %>
         <div class="list-card" id="active-tools">
           <%= for tool <- @view.tools do %>
-            <.tool_item tool={tool} prefix="main-" />
+            <.tool_item tool={tool} prefix="main-" loaded={@loaded} />
           <% end %>
         </div>
       <% end %>
     </div>
+
+    <.tool_search_panel :if={@tool_search} tool_search={@tool_search} />
 
     <%= if @view.inactive_tools != [] do %>
       <div class="info-section inactive-tools">
         <h3>💤 Inactive in this ability set ({length(@view.inactive_tools)})</h3>
         <div class="list-card" id="inactive-tools">
           <%= for {tool, sets} <- @view.inactive_tools do %>
-            <.tool_item tool={tool} prefix="inactive-" ability_sets={sets} />
+            <.tool_item tool={tool} prefix="inactive-" ability_sets={sets} loaded={@loaded} />
           <% end %>
         </div>
       </div>
     <% end %>
     """
   end
+
+  attr :tool_search, :map, required: true
+
+  # The namespaces the agent declares, each with the tools it groups and
+  # whether the conversation has loaded it, then the catalog fragment as the
+  # system prompt carries it for the tools sent.
+  defp tool_search_panel(assigns) do
+    ~H"""
+    <div class="info-section" id="tool-search-panel">
+      <h3>🔎 Tool Search ({length(@tool_search.namespaces)} namespaces)</h3>
+      <p class="ability-set-summary">
+        Deferred tools are sent on every request but kept out of the model's context until it
+        searches for them. Search variant: <code>{@tool_search.variant}</code>.
+      </p>
+      <%= if @tool_search.namespaces == [] do %>
+        <p class="empty-state">No tool is deferred into a namespace.</p>
+      <% else %>
+        <div class="list-card">
+          <div
+            :for={namespace <- @tool_search.namespaces}
+            class="list-item tool-search-namespace"
+            data-namespace={namespace.name}
+          >
+            <div class="list-item-header">
+              <span class="list-item-name">
+                <span class="badge badge-namespace">{namespace.name}</span>
+                <span :if={namespace.loaded?} class="badge badge-loaded">Loaded</span>
+                <span :if={!namespace.loaded?} class="badge badge-not-loaded">Not loaded</span>
+              </span>
+            </div>
+            <div class="list-item-description">{namespace.description}</div>
+            <div class="provider-item-chips tool-search-namespace-tools">
+              <span
+                :for={tool <- namespace.tools}
+                class={[
+                  "provider-item-chip",
+                  MapSet.member?(@tool_search.loaded, tool) && "tool-search-chip-loaded"
+                ]}
+              >
+                {tool}
+              </span>
+            </div>
+            <div class="list-item-details tool-search-entries">
+              From {Enum.map_join(namespace.entry_ids, ", ", &entry_label/1)}
+            </div>
+          </div>
+        </div>
+      <% end %>
+
+      <h4 class="tool-search-catalog-heading">Catalog in the system prompt</h4>
+      <%= cond do %>
+        <% is_nil(@tool_search.catalog) -> %>
+          <p class="empty-state">Turned off (<code>catalog: false</code>).</p>
+        <% @tool_search.catalog == "" -> %>
+          <p class="empty-state">Empty: no deferred tool is sent for this ability set.</p>
+        <% true -> %>
+          <div class="formatted-content tool-search-catalog" id="tool-search-catalog" phx-no-format><%= @tool_search.catalog %></div>
+      <% end %>
+    </div>
+    """
+  end
+
+  # A middleware entry id is its module by default, or a custom string.
+  defp entry_label(id) when is_binary(id), do: id
+  defp entry_label(id), do: format_module_name(id)
 
   attr :active, :string, default: nil
 

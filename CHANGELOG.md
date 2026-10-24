@@ -1,5 +1,27 @@
 # Changelog
 
+## v0.6.6
+
+Displays the provider tool search added in `sagents` v0.19.0 (`Sagents.Middleware.ToolSearch`). Tools can be deferred into namespaces (OpenAI tool namespaces, Anthropic deferred tools) and loaded by the model during a conversation, and the system prompt can carry a catalog of them. The debugger now shows which tools are deferred, what the conversation has loaded, the catalog, and the search calls and results in the message history.
+
+**Breaking:** the `sagents` requirement moves from `~> 0.12` to `~> 0.19`.
+
+### Upgrading from v0.6.5 - v0.6.6
+
+Host applications must be on `sagents` v0.19.0 or later (which requires `langchain` v0.15.5 or later). Hosts already on `sagents` v0.19 need no changes. The compatibility code for older `sagents` versions without ability sets or user request tracking is removed.
+
+### Added
+- The Tools tab has a "Tool Search" panel listing each namespace with its description, its tools, the middleware that contributed it, and whether the conversation has loaded it, followed by the catalog the system prompt carries and the search variant [#54](https://github.com/sagents-ai/sagents_live_debugger/pull/54)
+- Deferred tools are badged `Deferred` with their namespace, and marked `Loaded` or `Not loaded` for the conversation [#54](https://github.com/sagents-ai/sagents_live_debugger/pull/54)
+- Provider-defined tools (`LangChain.NativeTool`), such as `tool_search`, are badged `Provider tool` with a description and their configuration, instead of "No description available" [#54](https://github.com/sagents-ai/sagents_live_debugger/pull/54)
+- Messages render `:provider_item` content parts as collapsible cards. Tool search calls show their query, results show the namespaces and tools they loaded, and empty or failed searches are labeled (with the error code). Other server tools and provider items get a generic label, and every card keeps its raw JSON [#54](https://github.com/sagents-ai/sagents_live_debugger/pull/54)
+- `:tool_reference` content parts in tool results name the tool they point at [#54](https://github.com/sagents-ai/sagents_live_debugger/pull/54)
+- A tool defined only by a JSON schema lists its parameters from `parameters_schema` [#54](https://github.com/sagents-ai/sagents_live_debugger/pull/54)
+
+### Changed
+- **Breaking:** requires `sagents` `~> 0.19`. Ability sets are read through `Sagents.AbilitySets` directly, and utterance markers through `LangChain.Message.ContentPart.utterance/1` [#54](https://github.com/sagents-ai/sagents_live_debugger/pull/54)
+- Updated dependencies: `sagents` 0.19.0, `langchain` 0.15.5, `plug_crypto` 2.2.1 [#54](https://github.com/sagents-ai/sagents_live_debugger/pull/54)
+
 ## v0.6.5
 
 Displays the ability sets added in `sagents` v0.18.0 (`Sagents.Middleware.AbilitySetSwitcher`). An agent with ability sets keeps every set's middleware, so its full tool list and its assembled prompt do not match what the next LLM call sends. The debugger now shows the tools and system prompt for the active set and updates them when the set changes. Agents without ability sets, and agents running older `sagents` versions, render as before. The `sagents` requirement stays at `~> 0.12`.

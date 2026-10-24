@@ -189,6 +189,89 @@ defmodule SagentsLiveDebugger.Live.Components.MessageComponentsTest do
     end
   end
 
+  describe "tool_item/1 tool search" do
+    defp render_tool(tool, opts \\ []) do
+      render_component(&MessageComponents.tool_item/1, Keyword.merge([tool: tool], opts))
+      |> LazyHTML.from_fragment()
+    end
+
+    defp deferred_function(name, options \\ []) do
+      LangChain.Function.new!(%{
+        name: name,
+        description: "Tool #{name}",
+        parameters_schema: %{
+          "type" => "object",
+          "properties" => %{"site" => %{"type" => "string", "description" => "hq or warehouse"}},
+          "required" => ["site"]
+        },
+        options:
+          Keyword.merge(
+            [defer_loading: true, namespace: "devices", namespace_description: "Devices."],
+            options
+          ),
+        function: fn _args, _context -> {:ok, "ok"} end
+      })
+    end
+
+    test "the search tool is badged as a provider tool and described, with its variant" do
+      doc = render_tool(LangChain.NativeTool.tool_search(variant: :regex))
+
+      assert text(doc, ".badge-provider-tool") == "Provider tool"
+      assert text(doc, ".list-item-description") =~ "search for deferred tools"
+      refute text(doc, ".list-item-description") =~ "No description available"
+      assert text(doc, ".list-item-details") =~ "regex"
+    end
+
+    test "any other provider tool is badged and shows its configuration" do
+      tool =
+        LangChain.NativeTool.new!(%{name: "google_search", configuration: %{"mode" => "dynamic"}})
+
+      doc = render_tool(tool)
+
+      assert text(doc, ".badge-provider-tool") == "Provider tool"
+      assert text(doc, ".list-item-details") =~ "dynamic"
+    end
+
+    test "a deferred function is badged with its namespace" do
+      doc = render_tool(deferred_function("devices_list"))
+
+      assert text(doc, ".badge-deferred") == "Deferred"
+      assert text(doc, ".badge-namespace") == "devices"
+      refute has_node?(doc, ".badge-loaded")
+      refute has_node?(doc, ".badge-not-loaded")
+    end
+
+    test "a deferred function is marked loaded or not loaded against the conversation" do
+      loaded = MapSet.new(["devices_list"])
+
+      assert has_node?(
+               render_tool(deferred_function("devices_list"), loaded: loaded),
+               ".badge-loaded"
+             )
+
+      assert has_node?(
+               render_tool(deferred_function("devices_get"), loaded: loaded),
+               ".badge-not-loaded"
+             )
+    end
+
+    test "a visible function has no deferral badges, even when the set is given" do
+      tool = deferred_function("whoami", defer_loading: false, namespace: nil)
+      doc = render_tool(tool, loaded: MapSet.new())
+
+      refute has_node?(doc, ".badge-deferred")
+      refute has_node?(doc, ".badge-not-loaded")
+    end
+
+    test "a function defined by a JSON schema lists its parameters" do
+      doc = render_tool(deferred_function("devices_list"))
+
+      assert text(doc, ".list-item-details") =~ "site"
+      assert text(doc, ".list-item-details") =~ "hq or warehouse"
+      assert has_node?(doc, ".badge-required")
+    end
+  end
+
   describe "tool_result_item/1 content" do
     test "shows the text the LLM received, not the ContentPart structs" do
       result =
@@ -503,40 +586,169 @@ defmodule SagentsLiveDebugger.Live.Components.MessageComponentsTest do
     end
   end
 
-  describe "part_utterance/1" do
-    # The parts reaching these components are not always structs: state
-    # restored from a store arrives as plain maps, and its options may be a
-    # keyword list or a string-keyed map depending on where it came from.
+  describe "provider items on content parts" do
+    # A literal rather than `ContentPart.provider_item!/2`, which has no way to
+    # set `content`: a streamed Anthropic search call carries its input there.
+    defp provider_item(provider, item, content \\ nil),
+      do: %ContentPart{
+        type: :provider_item,
+        content: content,
+        options: [provider: provider, item: item]
+      }
 
+    # As a streamed Anthropic search arrives: the query is JSON text in
+    # `content`, and the item's `"input"` is still empty.
+    @streamed_search_call %{
+      "id" => "srvtoolu_01XSZbUuFkZmaRdAMeY41XBS",
+      "input" => %{},
+      "name" => "tool_search_tool_bm25",
+      "type" => "server_tool_use"
+    }
+
+    @search_result %{
+      "content" => %{
+        "tool_references" => [
+          %{"tool_name" => "devices_list", "type" => "tool_reference"},
+          %{"tool_name" => "devices_restart", "type" => "tool_reference"}
+        ],
+        "type" => "tool_search_tool_search_result"
+      },
+      "tool_use_id" => "srvtoolu_01XSZbUuFkZmaRdAMeY41XBS",
+      "type" => "tool_search_tool_result"
+    }
+
+    defp chips(doc),
+      do:
+        doc
+        |> LazyHTML.query(".provider-item-chip")
+        |> Enum.map(&(&1 |> LazyHTML.text() |> String.trim()))
+
+    test "a streamed Anthropic search call shows its query, decoded from the part's content" do
+      doc =
+        render_parts([
+          provider_item(
+            "anthropic",
+            @streamed_search_call,
+            ~s({"query": "list devices at a site"})
+          )
+        ])
+
+      assert has_node?(doc, ".content-part-provider-item[data-search='call']")
+      assert text(doc, ".provider-item-label") =~ "Tool search"
+      assert text(doc, ".provider-item-query") =~ "list devices at a site"
+      assert text(doc, ".badge-provider") == "anthropic"
+      assert text(doc, ".provider-item-type") == "server_tool_use"
+      refute has_node?(doc, ".content-part-unknown")
+
+      # The raw item, as it goes back to the provider, carries the decoded input.
+      assert text(doc, ".provider-item-raw") =~ "list devices at a site"
+    end
+
+    test "an Anthropic search result lists the tools it loaded" do
+      doc = render_parts([provider_item("anthropic", @search_result)])
+
+      assert has_node?(doc, ".content-part-provider-item[data-search='result']")
+      assert text(doc, ".provider-item-label") =~ "Tools loaded"
+      assert chips(doc) == ["devices_list", "devices_restart"]
+    end
+
+    test "a search that found nothing says so" do
+      empty = put_in(@search_result, ["content", "tool_references"], [])
+      doc = render_parts([provider_item("anthropic", empty)])
+
+      assert text(doc, ".provider-item-label") =~ "found nothing"
+      refute has_node?(doc, ".provider-item-chips")
+    end
+
+    test "a failed search is marked as an error with its code" do
+      error = %{
+        "type" => "tool_search_tool_result",
+        "tool_use_id" => "srvtoolu_1",
+        "content" => %{"type" => "tool_search_tool_result_error", "error_code" => "unavailable"}
+      }
+
+      doc = render_parts([provider_item("anthropic", error)])
+
+      assert has_node?(doc, ".content-part-provider-item[data-search='error']")
+      assert text(doc, ".provider-item-label") =~ "Tool search failed: unavailable"
+    end
+
+    test "an OpenAI search shows the paths it looked up, then its namespaces and tools" do
+      call = %{
+        "type" => "tool_search_call",
+        "id" => "tsc_1",
+        "execution" => "server",
+        "call_id" => nil,
+        "status" => "completed",
+        "arguments" => %{"paths" => ["devices"]}
+      }
+
+      output = %{
+        "type" => "tool_search_output",
+        "id" => "tso_1",
+        "tools" => [
+          %{
+            "type" => "namespace",
+            "name" => "devices",
+            "tools" => [%{"type" => "function", "name" => "devices_list"}]
+          },
+          %{"type" => "function", "name" => "billing_invoices"}
+        ]
+      }
+
+      doc = render_parts([provider_item("openai", call), provider_item("openai", output)])
+
+      assert text(doc, ".provider-item-query") =~ "devices"
+      assert chips(doc) == ["devices", "devices_list", "billing_invoices"]
+      assert has_node?(doc, ".provider-item-namespace")
+    end
+
+    test "any other provider item is labelled and keeps its raw view" do
+      web_search = %{
+        "type" => "web_search_tool_result",
+        "tool_use_id" => "srvtoolu_2",
+        "content" => []
+      }
+
+      doc = render_parts([provider_item("anthropic", web_search)])
+
+      assert text(doc, ".provider-item-label") =~ "Provider item"
+      assert text(doc, ".provider-item-type") == "web_search_tool_result"
+      assert has_node?(doc, ".provider-item-raw")
+    end
+
+    test "a tool result holding tool references names each tool" do
+      result = %ToolResult{
+        type: :function,
+        tool_call_id: "call_load",
+        name: "load_tools",
+        content: [ContentPart.tool_reference!("billing_invoices")]
+      }
+
+      doc = render_tool_result(result)
+
+      assert has_node?(doc, ".content-part-tool-reference")
+      assert text(doc, ".content-part-tool-reference .provider-item-chip") == "billing_invoices"
+      refute has_node?(doc, ".content-part-unknown")
+    end
+  end
+
+  describe "part_utterance/1" do
     test "reads a ContentPart struct" do
       assert MessageComponents.part_utterance(ContentPart.narration!("x")) == "narration"
       assert MessageComponents.part_utterance(ContentPart.answer!("x")) == "answer"
       assert MessageComponents.part_utterance(ContentPart.text!("x")) == nil
     end
 
-    test "reads a plain map with keyword options" do
-      part = %{type: :text, content: "x", options: [utterance: "narration"]}
-      assert MessageComponents.part_utterance(part) == "narration"
-    end
-
-    test "reads a plain map with string-keyed map options" do
-      part = %{type: :text, content: "x", options: %{"utterance" => "answer"}}
-      assert MessageComponents.part_utterance(part) == "answer"
-    end
-
-    test "returns nil for options it cannot read, rather than raising" do
-      for options <- [nil, [], ["not", "a", "keyword", "list"], %{}, "nonsense"] do
-        part = %{type: :text, content: "x", options: options}
-        assert MessageComponents.part_utterance(part) == nil
-      end
-    end
-
     test "returns nil for an unrecognized marker value" do
-      part = %{type: :text, content: "x", options: [utterance: "something_new"]}
+      part = %ContentPart{type: :text, content: "x", options: [utterance: "something_new"]}
       assert MessageComponents.part_utterance(part) == nil
     end
 
-    test "returns nil for a non-map" do
+    test "returns nil for anything that is not a ContentPart" do
+      assert MessageComponents.part_utterance(%{type: :text, options: [utterance: "narration"]}) ==
+               nil
+
       assert MessageComponents.part_utterance("just text") == nil
       assert MessageComponents.part_utterance(nil) == nil
     end
