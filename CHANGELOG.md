@@ -1,5 +1,24 @@
 # Changelog
 
+## v0.6.7
+
+Shows the ability set a sub-agent works in. In `sagents` v0.20.0, a general-purpose sub-agent can run in another mode, either named by the `task` call's `mode` argument or inherited from the parent's current set. The sub-agents tab now shows that set and where it came from. Sub-agents of agents without ability sets render as before.
+
+**Breaking:** the `sagents` requirement moves from `~> 0.19` to `~> 0.20`.
+
+### Upgrading from v0.6.6 - v0.6.7
+
+Host applications must be on `sagents` v0.20.0 or later. Upgrading `sagents` to v0.20.0 means removing `max_switches_per_run` from any `AbilitySetSwitcher` config; see the `sagents` v0.20.0 changelog. No debugger configuration changes are needed.
+
+### Added
+- A sub-agent's header shows a badge with its ability set, or "none (rails only)" for a sub-agent of a parent with ability sets that works in none [#55](https://github.com/sagents-ai/sagents_live_debugger/pull/55)
+- The sub-agent's Config tab has an "Ability Set" row saying whether the set was named by the task call's mode or is the parent's current set [#55](https://github.com/sagents-ai/sagents_live_debugger/pull/55)
+- The "SubAgent started" event summary names the set the sub-agent works in [#55](https://github.com/sagents-ai/sagents_live_debugger/pull/55)
+
+### Changed
+- **Breaking:** requires `sagents` `~> 0.20`, the release that reports a sub-agent's ability set in `{:subagent_started, metadata}` [#55](https://github.com/sagents-ai/sagents_live_debugger/pull/55)
+- Updated dependencies: `sagents` 0.20.0, `langchain` 0.15.8, `phoenix_html` 4.4.0, `websock_adapter` 0.7.0, `nimble_options` 1.2.0 [#55](https://github.com/sagents-ai/sagents_live_debugger/pull/55)
+
 ## v0.6.6
 
 Displays the provider tool search added in `sagents` v0.19.0 (`Sagents.Middleware.ToolSearch`). Tools can be deferred into namespaces (OpenAI tool namespaces, Anthropic deferred tools) and loaded by the model during a conversation, and the system prompt can carry a catalog of them. The debugger now shows which tools are deferred, what the conversation has loaded, the catalog, and the search calls and results in the message history.
