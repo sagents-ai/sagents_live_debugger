@@ -2,7 +2,7 @@ defmodule SagentsLiveDebugger.MixProject do
   use Mix.Project
 
   @source_url "https://github.com/sagents-ai/sagents_live_debugger"
-  @version "0.6.6"
+  @version "0.6.7"
 
   def project do
     [
@@ -43,7 +43,7 @@ defmodule SagentsLiveDebugger.MixProject do
       # Requires the Sagents release with `Sagents.Middleware.ToolSearch`.
       # Point this at that hex version once it is published.
       # {:sagents, path: "../sagents"},
-      {:sagents, "~> 0.19"},
+      {:sagents, "~> 0.20"},
       {:horde, "~> 0.10.0", optional: true},
       # markdown and code highlighting (autumn)
       {:mdex, ">= 0.11.0"},

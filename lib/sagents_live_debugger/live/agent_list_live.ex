@@ -2658,6 +2658,12 @@ defmodule SagentsLiveDebugger.AgentListLive do
     inspect(action_data, limit: 100)
   end
 
+  # A sub-agent built from the parent's ability sets names the set it works in.
+  defp started_set_suffix(%{ability_set_source: source} = data) when not is_nil(source),
+    do: " in #{data[:ability_set] || "rails only"}"
+
+  defp started_set_suffix(_data), do: ""
+
   # Format sub-agent events for display in the event stream
   defp format_subagent_event(sub_agent_id, {:subagent_started, data}) do
     name = data[:name] || "general-purpose"
@@ -2668,7 +2674,8 @@ defmodule SagentsLiveDebugger.AgentListLive do
       name: name,
       model: data[:model],
       tools: data[:tools] || [],
-      summary: "SubAgent started: #{name}"
+      ability_set: data[:ability_set],
+      summary: "SubAgent started: #{name}" <> started_set_suffix(data)
     }
   end
 
@@ -2866,6 +2873,8 @@ defmodule SagentsLiveDebugger.AgentListLive do
       tools: data.tools || [],
       middleware: data[:middleware] || [],
       model: data.model,
+      ability_set: data[:ability_set],
+      ability_set_source: data[:ability_set_source],
       status: :starting,
       started_at: DateTime.utc_now(),
       messages: initial_messages,

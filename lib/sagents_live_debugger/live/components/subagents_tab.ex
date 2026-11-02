@@ -71,7 +71,10 @@ defmodule SagentsLiveDebugger.Live.Components.SubagentsTab do
         <span class="subagent-expand-icon">
           {if @expanded, do: "▼", else: "▶"}
         </span>
-        <span class="subagent-name">{@subagent.name}</span>
+        <span class="subagent-name">
+          {@subagent.name}
+          <.ability_set_badge subagent={@subagent} />
+        </span>
         <.status_badge status={@subagent.status} />
         <%= if @subagent.token_usage do %>
           <.token_usage_badge token_usage={@subagent.token_usage} />
@@ -138,6 +141,32 @@ defmodule SagentsLiveDebugger.Live.Components.SubagentsTab do
   end
 
   @doc """
+  Renders the ability set a sub-agent works in, for a general-purpose
+  sub-agent of a parent with ability sets. Renders nothing for any other
+  sub-agent, including one reported by a sagents version that does not send
+  the set.
+  """
+  attr :subagent, :map, required: true
+
+  def ability_set_badge(assigns) do
+    ~H"""
+    <%= if ability_set_source(@subagent) do %>
+      <%= if @subagent[:ability_set] do %>
+        <span class="badge badge-ability-set">{@subagent[:ability_set]}</span>
+      <% else %>
+        <span class="badge badge-ability-set-none">none (rails only)</span>
+      <% end %>
+    <% end %>
+    """
+  end
+
+  defp ability_set_source(subagent), do: subagent[:ability_set_source]
+
+  defp ability_set_source_note(:requested), do: "named by the task call's mode"
+  defp ability_set_source_note(:inherited), do: "the parent's current set"
+  defp ability_set_source_note(_other), do: nil
+
+  @doc """
   Renders the status badge for a sub-agent.
   """
   attr :status, :atom, required: true
@@ -185,6 +214,16 @@ defmodule SagentsLiveDebugger.Live.Components.SubagentsTab do
         <label>Model:</label>
         <span>{@subagent.model || "Unknown"}</span>
       </div>
+
+      <%= if ability_set_source(@subagent) do %>
+        <div class="subagent-config-item" id={"subagent-ability-set-#{@subagent.id}"}>
+          <label>Ability Set:</label>
+          <span>
+            <.ability_set_badge subagent={@subagent} />
+            <span class="info-note">{ability_set_source_note(ability_set_source(@subagent))}</span>
+          </span>
+        </div>
+      <% end %>
 
       <%= if @subagent.instructions do %>
         <div class="subagent-config-item">
