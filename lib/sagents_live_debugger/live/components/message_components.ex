@@ -544,14 +544,23 @@ defmodule SagentsLiveDebugger.Live.Components.MessageComponents do
 
   @doc """
   Renders a tool call item.
+
+  The header shows the raw tool name next to the call's `display_text`, the
+  label the UI shows for it. That label may be static, derived from the tool
+  name, or written by the model (a `task` call's title, for example).
   """
   attr :tool_call, :map, required: true
 
   def tool_call_item(assigns) do
+    assigns = assign(assigns, :display_text, tool_call_display_text(assigns.tool_call))
+
     ~H"""
     <div class="tool-call">
       <div class="tool-call-header">
-        <span class="tool-name">🔧 {@tool_call.name}</span>
+        <span class="tool-call-title">
+          <span class="tool-name">🔧 {@tool_call.name}</span>
+          <span :if={@display_text} class="tool-display-text">{@display_text}</span>
+        </span>
         <%= if @tool_call.call_id do %>
           <span class="tool-call-id">{@tool_call.call_id}</span>
         <% end %>
@@ -564,6 +573,19 @@ defmodule SagentsLiveDebugger.Live.Components.MessageComponents do
       <% end %>
     </div>
     """
+  end
+
+  defp tool_call_display_text(tool_call) do
+    case Map.get(tool_call, :display_text) do
+      text when is_binary(text) ->
+        case String.trim(text) do
+          "" -> nil
+          trimmed -> trimmed
+        end
+
+      _other ->
+        nil
+    end
   end
 
   @doc """

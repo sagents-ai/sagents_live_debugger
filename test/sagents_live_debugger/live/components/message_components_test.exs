@@ -357,6 +357,52 @@ defmodule SagentsLiveDebugger.Live.Components.MessageComponentsTest do
     end
   end
 
+  defp render_tool_call(tool_call) do
+    (&MessageComponents.tool_call_item/1)
+    |> render_component(tool_call: tool_call)
+    |> LazyHTML.from_fragment()
+  end
+
+  defp tool_call(attrs) do
+    Map.merge(
+      %{name: "task", call_id: "call-1", arguments: %{"task_name" => "general-purpose"}},
+      attrs
+    )
+  end
+
+  describe "tool_call_item/1 label" do
+    test "shows the raw tool name and the display text" do
+      doc = render_tool_call(tool_call(%{display_text: "Investigate device state"}))
+
+      assert text(doc, ".tool-name") =~ "task"
+      assert text(doc, ".tool-display-text") == "Investigate device state"
+      assert text(doc, ".tool-call-id") == "call-1"
+    end
+
+    test "shows the display text even when it is the humanized tool name" do
+      doc = render_tool_call(tool_call(%{name: "file_write", display_text: "File write"}))
+
+      assert text(doc, ".tool-name") =~ "file_write"
+      assert text(doc, ".tool-display-text") == "File write"
+    end
+
+    test "shows only the raw name when there is no display text" do
+      for display_text <- [nil, "", "   "] do
+        doc = render_tool_call(tool_call(%{display_text: display_text}))
+
+        assert text(doc, ".tool-name") =~ "task"
+        refute has_node?(doc, ".tool-display-text")
+      end
+    end
+
+    test "a tool call map without a display_text key renders" do
+      doc = render_tool_call(tool_call(%{}))
+
+      assert text(doc, ".tool-name") =~ "task"
+      refute has_node?(doc, ".tool-display-text")
+    end
+  end
+
   describe "tool_result_item/1 outcome" do
     test "badges a failed result as an error" do
       result =
