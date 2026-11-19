@@ -1,5 +1,12 @@
 # Changelog
 
+## v0.6.8
+
+Tool call cards in the message history show the call's `display_text`, the label the app shows, next to the raw tool name. A `task` call that the model gave a title reads "🔧 task  Investigate device state" instead of just "🔧 task". `sagents` releases with model-written `task` titles provide that label; other tools show their configured or humanized label.
+
+### Added
+- Tool call cards show the call's `display_text` beside the raw tool name. A missing or blank label shows the name alone [#57](https://github.com/sagents-ai/sagents_live_debugger/pull/57)
+
 ## v0.6.7
 
 Shows the ability set a sub-agent works in. In `sagents` v0.20.0, a general-purpose sub-agent can run in another mode, either named by the `task` call's `mode` argument or inherited from the parent's current set. The sub-agents tab now shows that set and where it came from. Sub-agents of agents without ability sets render as before.
